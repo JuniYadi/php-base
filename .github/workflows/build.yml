@@ -1,7 +1,8 @@
 # ===============================================
 # Multi-Version PHP Base Image CI/CD
 # ===============================================
-# Testing: Single PHP version (8.5) + AMD64 only
+# Builds: PHP 8.2, 8.3, 8.4, 8.5
+# Platforms: AMD64 only (for GitHub Packages compatibility)
 # ===============================================
 
 name: Multi-Version PHP Build
@@ -23,19 +24,30 @@ on:
         required: false
         type: boolean
         default: false
+      php_version:
+        description: 'PHP version to build (leave empty for all)'
+        required: false
+        type: string
+        default: ''
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  PHP_VERSION: "8.5"
 
 jobs:
   # -----------------------------------------------
-  # Job: Build PHP 8.5 AMD64
+  # Job: Build PHP Images (Matrix)
   # -----------------------------------------------
   build:
-    name: Build PHP 8.5 (amd64)
+    name: Build PHP ${{ matrix.php_version }} (amd64)
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        php_version: ['8.2', '8.3', '8.4', '8.5']
+        include:
+          - php_version: '8.5'
+            is_latest: true
 
     permissions:
       contents: read
@@ -61,14 +73,14 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}
           tags: |
-            type=raw,value=8.5
-            type=raw,value=8.5-amd64
-            type=sha,prefix=8.5-,format=long
-            type=raw,value=latest
+            type=raw,value=${{ matrix.php_version }}
+            type=raw,value=${{ matrix.php_version }}-amd64
+            type=sha,prefix=${{ matrix.php_version }}-,format=long
+            ${{ matrix.is_latest == true && 'type=raw,value=latest' || '' }}
           labels: |
-            org.opencontainers.image.title=PHP 8.5
+            org.opencontainers.image.title=PHP ${{ matrix.php_version }}
             org.opencontainers.image.description=Multi-version PHP runtime with configurable extensions
-            php.version=8.5
+            php.version=${{ matrix.php_version }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
@@ -77,23 +89,99 @@ jobs:
           push: ${{ github.event_name == 'push' || inputs.push }}
           platforms: linux/amd64
           build-args: |
-            PHP_VERSION=8.5
+            PHP_VERSION=${{ matrix.php_version }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=php-8.5-amd64
-          cache-to: type=gha,mode=max,scope=php-8.5-amd64
+          cache-from: type=gha,scope=php-${{ matrix.php_version }}-amd64
+          cache-to: type=gha,mode=max,scope=php-${{ matrix.php_version }}-amd64
           provenance: false
 
-      - name: Image digest
+      - name: Get image size
+        id: image-size
         run: |
-          echo "Image digest: ${{ steps.build.outputs.digest }}"
+          SIZE=$(docker images "${{ env.REGISTRY }}/${{ github.repository }}:${{ matrix.php_version }}" --format "{{.Size}}")
+          echo "size=${SIZE}" >> $GITHUB_OUTPUT
+          echo "Image size: $SIZE"
+
+      - name: Upload image size
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-size-${{ matrix.php_version }}
+          path: |
+            ${{ env.REGISTRY }}/${{ github.repository }}:${{ matrix.php_version }}
+          retention-days: 1
 
   # -----------------------------------------------
-  # Job: Security Scan
+  # Job: List All Image Sizes
+  # -----------------------------------------------
+  list-sizes:
+    name: List Image Sizes
+    runs-on: ubuntu-24.04
+    needs: build
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull and list all image sizes
+        run: |
+          echo "========================================"
+          echo "Docker Image Sizes for GitHub Packages"
+          echo "========================================"
+          echo ""
+
+          for VERSION in 8.2 8.3 8.4 8.5; do
+            IMAGE="${{ env.REGISTRY }}/${{ github.repository }}:${VERSION}"
+            docker pull "$IMAGE" 2>/dev/null || echo "Failed to pull: $IMAGE"
+            SIZE=$(docker images "$IMAGE" --format "{{.Size}}" 2>/dev/null || echo "N/A")
+            DIGEST=$(docker images "$IMAGE" --format "{{.Digest}}" 2>/dev/null | head -1 || echo "N/A")
+            echo "PHP ${VERSION}:"
+            echo "  Size:   ${SIZE}"
+            echo "  Digest: ${DIGEST}"
+            echo ""
+          done
+
+          echo "========================================"
+
+      - name: Create size summary
+        run: |
+          echo "## PHP Docker Image Sizes" > /tmp/size-summary.md
+          echo "" >> /tmp/size-summary.md
+          echo "Built on: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> /tmp/size-summary.md
+          echo "" >> /tmp/size-summary.md
+          echo "| Version | Size | Digest |" >> /tmp/size-summary.md
+          echo "|---------|------|--------|" >> /tmp/size-summary.md
+
+          for VERSION in 8.2 8.3 8.4 8.5; do
+            IMAGE="${{ env.REGISTRY }}/${{ github.repository }}:${VERSION}"
+            SIZE=$(docker images "$IMAGE" --format "{{.Size}}" 2>/dev/null || echo "N/A")
+            DIGEST=$(docker images "$IMAGE" --format "{{.Digest}}" 2>/dev/null | sed 's/sha256://' | cut -c1-12 || echo "N/A")
+            echo "| PHP ${VERSION} | ${SIZE} | \`${DIGEST}\` |" >> /tmp/size-summary.md
+          done
+
+          echo "" >> /tmp/size-summary.md
+          echo "**Total Images:** 4" >> /tmp/size-summary.md
+          echo "**Platform:** linux/amd64" >> /tmp/size-summary.md
+
+          cat /tmp/size-summary.md
+
+  # -----------------------------------------------
+  # Job: Security Scan (Latest Only)
   # -----------------------------------------------
   security:
-    name: Security Scan
+    name: Security Scan (8.5)
     runs-on: ubuntu-latest
+    needs: build
 
     steps:
       - name: Checkout repository
