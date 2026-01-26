@@ -128,7 +128,7 @@ jobs:
       - name: Upload image sizes
         uses: actions/upload-artifact@v4
         with:
-          name: image-sizes
+          name: image-sizes-${{ matrix.php_version }}-${{ matrix.base_image }}
           path: /tmp/image-sizes.json
           retention-days: 1
 
@@ -144,14 +144,9 @@ jobs:
       - name: Download image sizes
         uses: actions/download-artifact@v4
         with:
-          name: image-sizes
+          pattern: image-sizes-*
           path: /tmp
-
-      - name: Fix line endings
-        run: |
-          # Remove empty lines and fix formatting
-          grep -v '^$' /tmp/image-sizes.json > /tmp/image-sizes-clean.json
-          mv /tmp/image-sizes-clean.json /tmp/image-sizes.json
+          merge-multiple: true
 
       - name: Combine and display sizes
         run: |
