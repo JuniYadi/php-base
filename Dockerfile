@@ -22,6 +22,7 @@ RUN apk add --no-cache \
     freetype-dev \
     icu-dev \
     sqlite-dev \
+    postgresql-dev \
     unzip \
     zip \
     git \
