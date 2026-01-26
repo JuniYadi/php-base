@@ -104,7 +104,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: ${{ github.event_name == 'push' || inputs.push }}
+          push: ${{ github.event_name == 'push' || inputs.push == true }}
           platforms: linux/amd64
           build-args: |
             PHP_VERSION=${{ matrix.php_version }}
@@ -141,21 +141,12 @@ jobs:
     needs: build
 
     steps:
-      - name: Download image size artifacts via API
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # Get all artifact IDs matching image-sizes-*
-          for art in $(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts --paginate | jq -r '.artifacts[] | select(.name | startswith("image-sizes-")) | .id'); do
-            echo "Downloading artifact $art"
-            gh api repos/${{ github.repository }}/actions/artifacts/$art/zip --header "Accept: application/zip" -o /tmp/sizes-$art.zip 2>/dev/null
-            unzip -q /tmp/sizes-$art.zip -d /tmp/sizes/ 2>/dev/null
-            rm -f /tmp/sizes-$art.zip
-          done
-
-          # Combine all JSON files
-          find /tmp/sizes -name '*.json' -exec cat {} \; > /tmp/image-sizes.json
-          echo "Found $(wc -l < /tmp/image-sizes.json) image sizes"
+      - name: Download all image size artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/sizes
+          pattern: image-sizes-*
+          merge-multiple: true
 
       - name: Combine and display sizes
         run: |
@@ -166,16 +157,18 @@ jobs:
           echo "| Version | Base | Size | Digest |"
           echo "|---------|------|------|--------|"
 
-          # Sort and display image sizes
-          sort -t'"' -k3V /tmp/image-sizes.json | while IFS= read -r line; do
-            VERSION=$(echo "$line" | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
-            BASE=$(echo "$line" | grep -o '"base":"[^"]*"' | cut -d'"' -f4)
-            SIZE=$(echo "$line" | grep -o '"size":"[^"]*"' | cut -d'"' -f4)
-            DIGEST=$(echo "$line" | grep -o '"digest":"[^"]*"' | cut -d'"' -f4)
-            echo "| PHP ${VERSION} | ${BASE} | ${SIZE} | \`${DIGEST}\` |"
+          # Process each JSON file
+          for file in /tmp/sizes/*.json; do
+            if [ -f "$file" ]; then
+              VERSION=$(jq -r '.version' "$file")
+              BASE=$(jq -r '.base' "$file")
+              SIZE=$(jq -r '.size' "$file")
+              DIGEST=$(jq -r '.digest' "$file")
+              echo "| PHP ${VERSION} | ${BASE} | ${SIZE} | \`${DIGEST}\` |"
+            fi
           done
 
-          TOTAL=$(wc -l < /tmp/image-sizes.json)
+          TOTAL=$(ls -1 /tmp/sizes/*.json 2>/dev/null | wc -l)
           echo ""
           echo "**Total Images:** ${TOTAL}"
           echo "**Platform:** linux/amd64"
@@ -190,16 +183,18 @@ jobs:
           echo "| Version | Base | Size | Digest |" >> /tmp/size-summary.md
           echo "|---------|------|------|--------|" >> /tmp/size-summary.md
 
-          # Sort and display image sizes
-          sort -t'"' -k3V /tmp/image-sizes.json | while IFS= read -r line; do
-            VERSION=$(echo "$line" | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
-            BASE=$(echo "$line" | grep -o '"base":"[^"]*"' | cut -d'"' -f4)
-            SIZE=$(echo "$line" | grep -o '"size":"[^"]*"' | cut -d'"' -f4)
-            DIGEST=$(echo "$line" | grep -o '"digest":"[^"]*"' | cut -d'"' -f4)
-            echo "| PHP ${VERSION} | ${BASE} | ${SIZE} | \`${DIGEST}\` |" >> /tmp/size-summary.md
+          # Process each JSON file
+          for file in /tmp/sizes/*.json; do
+            if [ -f "$file" ]; then
+              VERSION=$(jq -r '.version' "$file")
+              BASE=$(jq -r '.base' "$file")
+              SIZE=$(jq -r '.size' "$file")
+              DIGEST=$(jq -r '.digest' "$file")
+              echo "| PHP ${VERSION} | ${BASE} | ${SIZE} | \`${DIGEST}\` |" >> /tmp/size-summary.md
+            fi
           done
 
-          TOTAL=$(wc -l < /tmp/image-sizes.json)
+          TOTAL=$(ls -1 /tmp/sizes/*.json 2>/dev/null | wc -l)
           echo "" >> /tmp/size-summary.md
           echo "**Total Images:** ${TOTAL}" >> /tmp/size-summary.md
           echo "**Platform:** linux/amd64" >> /tmp/size-summary.md
