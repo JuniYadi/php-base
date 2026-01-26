@@ -2,17 +2,14 @@
 # Multi-Version PHP Base Image
 # ===============================================
 # Supports: PHP 7.4, 8.0, 8.1, 8.2, 8.3, 8.4, 8.5
-# Build with: --build-arg PHP_VERSION=8.4
+# Build with: --build-arg PHP_VERSION=8.5
 # ===============================================
 
 # Build argument for PHP version
-ARG PHP_VERSION=8.4
+ARG PHP_VERSION=8.5
 
 # ===============================================
 # Stage 1: Base PHP Runtime
-# ===============================================
-# Contains PHP + all common extensions
-# This layer is cached per PHP version
 # ===============================================
 FROM php:${PHP_VERSION}-fpm-alpine AS php-base
 
@@ -25,7 +22,6 @@ RUN apk add --no-cache \
     freetype-dev \
     icu-dev \
     sqlite-dev \
-    oniguruma-dev \
     unzip \
     zip \
     git \
@@ -36,18 +32,24 @@ RUN docker-php-ext-configure gd \
         --with-freetype \
         --with-jpeg
 
-# Install core extensions (always enabled)
+# Install core extensions in groups to avoid failures
 RUN docker-php-ext-install -j$(nproc) \
         pdo \
         pdo_mysql \
         pdo_pgsql \
         pdo_sqlite \
         mysqli \
+    && rm -rf /var/cache/apk/* /tmp/*
+
+RUN docker-php-ext-install -j$(nproc) \
         mbstring \
         gd \
         intl \
         zip \
         bcmath \
+    && rm -rf /var/cache/apk/* /tmp/*
+
+RUN docker-php-ext-install -j$(nproc) \
         sockets \
         json \
         xml \
@@ -55,46 +57,12 @@ RUN docker-php-ext-install -j$(nproc) \
         xmlwriter \
         fileinfo \
         opcache \
-        oniguruma \
-    && rm -rf /var/cache/apk/* \
-    && rm -rf /tmp/*
+    && rm -rf /var/cache/apk/* /tmp/*
 
 # ===============================================
-# Stage 2: Optional Extensions
+# Stage 2: Optional Extensions (later)
 # ===============================================
-# These extensions are installed but disabled by default
-# Enable via PHP_EXT_* environment variables at runtime
-# ===============================================
-
-# Redis extension
-RUN apk add --no-cache \
-        php84-pecl-redis \
-    || apk add --no-cache \
-        php83-pecl-redis \
-    || apk add --no-cache \
-        php82-pecl-redis \
-    || apk add --no-cache \
-        php81-pecl-redis \
-    || apk add --no-cache \
-        php80-pecl-redis \
-    || apk add --no-cache \
-        php74-pecl-redis \
-    || true
-
-# Memcached extension
-RUN apk add --no-cache \
-        php84-pecl-memcached \
-    || apk add --no-cache \
-        php83-pecl-memcached \
-    || apk add --no-cache \
-        php82-pecl-memcached \
-    || apk add --no-cache \
-        php81-pecl-memcached \
-    || apk add --no-cache \
-        php80-pecl-memcached \
-    || apk add --no-cache \
-        php74-pecl-memcached \
-    || true
+# Extensions can be added per-version as needed
 
 # Create extension configuration directories
 RUN mkdir -p /usr/local/etc/php/conf.d \
@@ -106,8 +74,6 @@ COPY docker/php/php-fpm.conf.tpl /usr/local/etc/php-fpm/php-fpm.conf.tpl
 
 # ===============================================
 # Stage 3: Runtime Image
-# ===============================================
-# Production-ready image with Nginx and supervisor
 # ===============================================
 FROM php-base AS php-runtime
 
