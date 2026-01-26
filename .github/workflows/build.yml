@@ -141,20 +141,15 @@ jobs:
     needs: build
 
     steps:
-      - name: Download all image size artifacts
-        uses: dawidd6/action-download-artifact@v6
+      - name: Download image size artifacts
+        uses: actions/download-artifact@v4
         with:
-          workflow: ${{ github.workflow }}
-          run_id: ${{ github.run_id }}
           path: /tmp/sizes
 
-      - name: Filter and combine image sizes
+      - name: Combine image sizes
         run: |
-          # Filter only image-size artifacts and combine
-          for f in /tmp/sizes/image-sizes-*.json; do
-            [ -f "$f" ] && cat "$f"
-          done > /tmp/image-sizes.json
-
+          # Combine only image-sizes-* files (not dockerbuild)
+          find /tmp/sizes -name 'image-sizes-*.json' -exec cat {} \; > /tmp/image-sizes.json 2>/dev/null || true
           echo "Found $(wc -l < /tmp/image-sizes.json) image sizes"
 
       - name: Combine and display sizes
