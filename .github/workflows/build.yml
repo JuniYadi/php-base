@@ -145,8 +145,15 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: image-sizes-*
-          path: /tmp
+          path: /tmp/sizes
           merge-multiple: true
+
+      - name: Combine all size files
+        run: |
+          # Combine all files into one, removing empty lines
+          ls -la /tmp/sizes/
+          cat /tmp/sizes/image-sizes-* 2>/dev/null | grep -v '^$' > /tmp/image-sizes.json
+          echo "Total lines: $(wc -l < /tmp/image-sizes.json)"
 
       - name: Combine and display sizes
         run: |
