@@ -23,6 +23,9 @@ RUN apk add --no-cache \
     icu-dev \
     sqlite-dev \
     postgresql-dev \
+    oniguruma-dev \
+    linux-headers \
+    libxml2-dev \
     unzip \
     zip \
     git \
@@ -50,15 +53,15 @@ RUN docker-php-ext-install -j$(nproc) \
         bcmath \
     && rm -rf /var/cache/apk/* /tmp/*
 
-RUN docker-php-ext-install -j$(nproc) \
-        sockets \
-        json \
-        xml \
-        tokenizer \
-        xmlwriter \
-        fileinfo \
-        opcache \
-    && rm -rf /var/cache/apk/* /tmp/*
+# Install core extensions individually to isolate build issues
+# Note: json, fileinfo, tokenizer are built into PHP 8.x core
+RUN docker-php-ext-install sockets && rm -rf /var/cache/apk/* /tmp/*
+RUN docker-php-ext-install xml && rm -rf /var/cache/apk/* /tmp/*
+RUN docker-php-ext-install xmlwriter && rm -rf /var/cache/apk/* /tmp/*
+
+# Enable opcache (built into PHP 8.5 base image - use directives, not zend_extension)
+RUN echo "opcache.enable=1" > /usr/local/etc/php/conf.d/opcache.ini && \
+    rm -rf /var/cache/apk/* /tmp/*
 
 # ===============================================
 # Stage 2: Optional Extensions (later)
@@ -103,9 +106,8 @@ COPY docker/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 COPY docker/start.sh /usr/local/bin/start.sh
 RUN chmod +x /usr/local/bin/*.sh
 
-# Create www-data user
-RUN addgroup -g 1000 -S www-data && \
-    adduser -u 1000 -S www-data -G www-data
+# Create www-data user (already exists in PHP base image)
+RUN id www-data 2>/dev/null || (addgroup -g 1000 -S www-data && adduser -u 1000 -S www-data -G www-data)
 
 # Set ownership
 RUN chown -R www-data:www-data /var/www/html
