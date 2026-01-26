@@ -2,71 +2,69 @@
 # Multi-Version PHP Base Image
 # ===============================================
 # Supports: PHP 7.4, 8.0, 8.1, 8.2, 8.3, 8.4, 8.5
-# Build with: --build-arg PHP_VERSION=8.5
+# Build with:
+#   - Alpine:  docker build --build-arg BASE_IMAGE=alpine -t php:8.5-alpine .
+#   - Debian:  docker build --build-arg BASE_IMAGE=debian -t php:8.5-debian .
 # ===============================================
 
-# Build argument for PHP version
+# Build arguments
 ARG PHP_VERSION=8.5
+ARG BASE_IMAGE=alpine  # Options: alpine, debian
 
 # ===============================================
 # Stage 1: Base PHP Runtime
 # ===============================================
-FROM php:${PHP_VERSION}-fpm-alpine AS php-base
+# Alpine base (default - smaller footprint)
+FROM php:${PHP_VERSION}-fpm-alpine AS php-base-alpine
 
-# Install build dependencies for extensions
-RUN apk add --no-cache \
-    curl \
-    libzip-dev \
-    libpng-dev \
-    libjpeg-turbo-dev \
-    freetype-dev \
-    icu-dev \
-    sqlite-dev \
-    postgresql-dev \
-    oniguruma-dev \
-    linux-headers \
-    libxml2-dev \
-    unzip \
-    zip \
-    git \
-    && rm -rf /var/cache/apk/*
+# Debian base (better glibc compatibility)
+FROM php:${PHP_VERSION}-fpm-bookworm AS php-base-debian
+
+# Common base stage selector
+FROM php-base-${BASE_IMAGE} AS php-base
+
+# Install build dependencies based on base OS
+ARG BASE_IMAGE
+RUN if [ "${BASE_IMAGE}" = "debian" ]; then \
+        apt-get update && apt-get install -y --no-install-recommends \
+            curl libzip-dev libpng-dev libjpeg-dev libfreetype6-dev \
+            libicu-dev libsqlite3-dev libpq-dev libonig-dev libxml2-dev && \
+        rm -rf /var/lib/apt/lists/* /tmp/*; \
+    else \
+        apk add --no-cache \
+            curl libzip-dev libpng-dev libjpeg-turbo-dev freetype-dev \
+            icu-dev sqlite-dev postgresql-dev oniguruma-dev linux-headers libxml2-dev && \
+        rm -rf /var/cache/apk/* /tmp/*; \
+    fi
 
 # Configure GD with FreeType and JPEG support
 RUN docker-php-ext-configure gd \
         --with-freetype \
         --with-jpeg
 
-# Install core extensions in groups to avoid failures
+# Install core extensions
 RUN docker-php-ext-install -j$(nproc) \
         pdo \
         pdo_mysql \
         pdo_pgsql \
         pdo_sqlite \
-        mysqli \
-    && rm -rf /var/cache/apk/* /tmp/*
+        mysqli
 
 RUN docker-php-ext-install -j$(nproc) \
         mbstring \
         gd \
         intl \
         zip \
-        bcmath \
-    && rm -rf /var/cache/apk/* /tmp/*
+        bcmath
 
 # Install core extensions individually to isolate build issues
 # Note: json, fileinfo, tokenizer are built into PHP 8.x core
-RUN docker-php-ext-install sockets && rm -rf /var/cache/apk/* /tmp/*
-RUN docker-php-ext-install xml && rm -rf /var/cache/apk/* /tmp/*
-RUN docker-php-ext-install xmlwriter && rm -rf /var/cache/apk/* /tmp/*
+RUN docker-php-ext-install sockets
+RUN docker-php-ext-install xml
+RUN docker-php-ext-install xmlwriter
 
 # Enable opcache (built into PHP 8.5 base image - use directives, not zend_extension)
-RUN echo "opcache.enable=1" > /usr/local/etc/php/conf.d/opcache.ini && \
-    rm -rf /var/cache/apk/* /tmp/*
-
-# ===============================================
-# Stage 2: Optional Extensions (later)
-# ===============================================
-# Extensions can be added per-version as needed
+RUN echo "opcache.enable=1" > /usr/local/etc/php/conf.d/opcache.ini
 
 # Create extension configuration directories
 RUN mkdir -p /usr/local/etc/php/conf.d \
@@ -77,18 +75,21 @@ COPY docker/php/php.ini.tpl /usr/local/etc/php/php.ini.tpl
 COPY docker/php/php-fpm.conf.tpl /usr/local/etc/php-fpm/php-fpm.conf.tpl
 
 # ===============================================
-# Stage 3: Runtime Image
+# Stage 2: Runtime Image
 # ===============================================
 FROM php-base AS php-runtime
 
-# Install runtime dependencies
-RUN apk add --no-cache \
-    nginx \
-    supervisor \
-    curl \
-    ca-certificates \
-    bash \
-    && rm -rf /var/cache/apk/*
+# Install runtime dependencies based on base OS
+ARG BASE_IMAGE
+RUN if [ "${BASE_IMAGE}" = "debian" ]; then \
+        apt-get update && apt-get install -y --no-install-recommends \
+            nginx supervisor curl ca-certificates bash && \
+        rm -rf /var/lib/apt/lists/* /tmp/*; \
+    else \
+        apk add --no-cache \
+            nginx supervisor curl ca-certificates bash && \
+        rm -rf /var/cache/apk/* /tmp/*; \
+    fi
 
 # Create directories
 RUN mkdir -p /var/www/html \
@@ -106,8 +107,9 @@ COPY docker/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 COPY docker/start.sh /usr/local/bin/start.sh
 RUN chmod +x /usr/local/bin/*.sh
 
-# Create www-data user (already exists in PHP base image)
-RUN id www-data 2>/dev/null || (addgroup -g 1000 -S www-data && adduser -u 1000 -S www-data -G www-data)
+# Create www-data user
+RUN groupadd -g 1000 www-data 2>/dev/null || true && \
+    useradd -u 1000 -g www-data -s /bin/bash -m www-data 2>/dev/null || true
 
 # Set ownership
 RUN chown -R www-data:www-data /var/www/html
@@ -149,8 +151,9 @@ CMD ["/usr/local/bin/start.sh"]
 # ===============================================
 # Image Labels
 # ===============================================
-LABEL org.opencontainers.image.title="PHP ${PHP_VERSION} Base Image" \
-      org.opencontainers.image.description="Multi-version PHP runtime with configurable extensions and Nginx" \
+LABEL org.opencontainers.image.title="PHP ${PHP_VERSION}" \
+      org.opencontainers.image.description="Multi-version PHP runtime with ${BASE_IMAGE} base" \
       org.opencontainers.image.version="${PHP_VERSION}" \
       maintainer="juniyadi" \
-      php.version="${PHP_VERSION}"
+      php.version="${PHP_VERSION}" \
+      base.image="${BASE_IMAGE}"
