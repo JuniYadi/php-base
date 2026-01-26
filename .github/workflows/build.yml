@@ -34,66 +34,38 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  # Will be set to github.repository (e.g., juniyadi/docker-php)
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # -----------------------------------------------
-  # Job: Generate Build Matrix
-  # -----------------------------------------------
-  matrix:
-    name: Generate Build Matrix
-    runs-on: ubuntu-latest
-    outputs: |
-      php_versions: ${{ steps.matrix.outputs.php_versions }}
-      platforms: ${{ steps.matrix.outputs.platforms }}
-    steps:
-      - name: Generate PHP version matrix
-        id: matrix
-        run: |
-          # Default: all supported PHP versions
-          PHP_VERSIONS='["7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"]'
-          PLATFORMS='["amd64", "arm64"]'
-
-          # For manual dispatch, use specified versions
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            INPUT_VERSIONS="${{ inputs.php_versions }}"
-            if [ "$INPUT_VERSIONS" != "all" ] && [ -n "$INPUT_VERSIONS" ]; then
-              # Convert comma-separated to JSON array
-              PHP_VERSIONS="[$(echo "$INPUT_VERSIONS" | sed 's/, /","/g' | sed 's/^/"/;s/$/"/')]"
-            fi
-          fi
-
-          # For pull requests, only build latest 3 versions to save resources
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            PHP_VERSIONS='["8.3", "8.4", "8.5"]'
-          fi
-
-          echo "PHP versions: $PHP_VERSIONS"
-          echo "Platforms: $PLATFORMS"
-
-          echo "php_versions=$PHP_VERSIONS" >> $GITHUB_OUTPUT
-          echo "platforms=$PLATFORMS" >> $GITHUB_OUTPUT
-
   # -----------------------------------------------
   # Job: Build All PHP Versions
   # -----------------------------------------------
   build:
     name: Build PHP ${{ matrix.php }} (${{ matrix.platform }})
-    needs: matrix
     runs-on: ${{ matrix.platform == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+
+    # Determine if this is a push event
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.push || github.event_name == 'push' }}
 
     strategy:
       fail-fast: false
       matrix:
-        php: ${{ fromJson(needs.matrix.outputs.php_versions) }}
-        platform: ${{ fromJson(needs.matrix.outputs.platforms) }}
+        php: [7.4, 8.0, 8.1, 8.2, 8.3, 8.4, 8.5]
+        platform: [amd64, arm64]
         # Exclude older PHP versions from ARM64 (limited support)
         exclude:
-          - php: "7.4"
-            platform: "arm64"
-          - php: "8.0"
-            platform: "arm64"
+          - php: 7.4
+            platform: arm64
+          - php: 8.0
+            platform: arm64
+        # For pull requests, limit to latest 3 versions
+        include:
+          - php: 8.3
+            pr_only: true
+          - php: 8.4
+            pr_only: true
+          - php: 8.5
+            pr_only: true
 
     permissions:
       contents: read
@@ -112,7 +84,6 @@ jobs:
 
       - name: Log in to Container Registry
         uses: docker/login-action@v3
-        if: ${{ github.event_name == 'push' || inputs.push }}
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -124,11 +95,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}
           tags: |
-            # Version tag (e.g., 8.4)
             type=raw,value=${{ matrix.php }}
-            # Platform-specific tag (e.g., 8.4-amd64)
             type=raw,value=${{ matrix.php }}-${{ matrix.platform }}
-            # SHA tag for traceability
             type=sha,prefix=${{ matrix.php }}-,format=long
           labels: |
             org.opencontainers.image.title=PHP ${{ matrix.php }}
@@ -145,7 +113,6 @@ jobs:
             PHP_VERSION=${{ matrix.php }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Cache scope per PHP version for efficient layer caching
           cache-from: type=gha,scope=php-${{ matrix.php }}-${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=php-${{ matrix.php }}-${{ matrix.platform }}
           provenance: false
@@ -170,6 +137,8 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
 
+    if: ${{ github.event_name == 'push' || inputs.push }}
+
     permissions:
       contents: read
       packages: write
@@ -183,7 +152,6 @@ jobs:
 
       - name: Log in to Container Registry
         uses: docker/login-action@v3
-        if: ${{ github.event_name == 'push' || inputs.push }}
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -197,11 +165,9 @@ jobs:
           merge-multiple: true
 
       - name: Create and push manifests
-        if: ${{ github.event_name == 'push' || inputs.push }}
         run: |
           IMAGE_BASE="${{ env.REGISTRY }}/${{ github.repository }}"
 
-          # Get list of built PHP versions
           PHP_VERSIONS=$(ls /tmp/artifacts/*.txt 2>/dev/null | sed 's|/tmp/artifacts/image-\(.*\)-.*\.txt|\1|' | sort -u)
 
           echo "Creating manifests for PHP versions: $PHP_VERSIONS"
@@ -212,11 +178,9 @@ jobs:
             AMD64_DIGEST=$(cat /tmp/artifacts/image-${PHP_VERSION}-amd64.txt 2>/dev/null | head -1)
             ARM64_DIGEST=$(cat /tmp/artifacts/image-${PHP_VERSION}-arm64.txt 2>/dev/null | head -1)
 
-            # Build image references
             AMD64_REF="${IMAGE_BASE}:${PHP_VERSION}-amd64"
             ARM64_REF="${IMAGE_BASE}:${PHP_VERSION}-arm64"
 
-            # Push platform-specific images first (already pushed by build job, just create aliases)
             if [ -n "$AMD64_DIGEST" ]; then
               docker buildx imagetools create \
                 --tag "${IMAGE_BASE}:${PHP_VERSION}-amd64" \
@@ -229,7 +193,6 @@ jobs:
                 "$ARM64_DIGEST" || true
             fi
 
-            # Create multi-arch manifest
             if [ -n "$AMD64_DIGEST" ] && [ -n "$ARM64_DIGEST" ]; then
               docker buildx imagetools create \
                 --tag "${IMAGE_BASE}:${PHP_VERSION}" \
@@ -238,7 +201,6 @@ jobs:
 
               echo "Created multi-arch manifest: ${IMAGE_BASE}:${PHP_VERSION}"
 
-              # Create latest alias for the highest version
               if [ "$PHP_VERSION" = "8.5" ]; then
                 docker buildx imagetools create \
                   --tag "${IMAGE_BASE}:latest" \
@@ -247,13 +209,11 @@ jobs:
                 echo "Created latest alias: ${IMAGE_BASE}:latest"
               fi
             elif [ -n "$AMD64_DIGEST" ]; then
-              # Only AMD64 available
               docker buildx imagetools create \
                 --tag "${IMAGE_BASE}:${PHP_VERSION}" \
                 "$AMD64_REF"
               echo "Created AMD64-only manifest: ${IMAGE_BASE}:${PHP_VERSION}"
             elif [ -n "$ARM64_DIGEST" ]; then
-              # Only ARM64 available
               docker buildx imagetools create \
                 --tag "${IMAGE_BASE}:${PHP_VERSION}" \
                 "$ARM64_REF"
@@ -288,7 +248,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        php: ${{ fromJson(needs.matrix.outputs.php_versions) }}
+        php: [7.4, 8.0, 8.1, 8.2, 8.3, 8.4, 8.5]
+        platform: [amd64, arm64]
+        exclude:
+          - php: 7.4
+            platform: arm64
+          - php: 8.0
+            platform: arm64
 
     steps:
       - name: Checkout repository
@@ -309,12 +275,12 @@ jobs:
         with:
           image-ref: '${{ env.REGISTRY }}/${{ github.repository }}:${{ matrix.php }}'
           format: 'sarif'
-          output: 'trivy-result-${{ matrix.php }}.sarif'
+          output: 'trivy-result-${{ matrix.php }}-${{ matrix.platform }}.sarif'
           severity: 'CRITICAL,HIGH'
           ignore-unfixed: true
 
       - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@v2
         with:
-          sarif_file: 'trivy-result-${{ matrix.php }}.sarif'
+          sarif_file: 'trivy-result-${{ matrix.php }}-${{ matrix.platform }}.sarif'
           category: 'trivy/php-${{ matrix.php }}'
