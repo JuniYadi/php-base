@@ -85,7 +85,8 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}
+          # Use lowercase for repository name
+          images: ghcr.io/juniyadi/php-base
           tags: |
             type=raw,value=${{ matrix.php_version }}-${{ matrix.base_image }}
             type=raw,value=${{ matrix.php_version }}-${{ matrix.base_image }}-amd64
@@ -116,7 +117,9 @@ jobs:
       - name: Get image size
         id: image-size
         run: |
-          SIZE=$(docker images "${{ env.REGISTRY }}/${{ github.repository }}:${{ matrix.php_version }}-${{ matrix.base_image }}" --format "{{.Size}}")
+          # Use lowercase for repository name
+          IMAGE="ghcr.io/juniyadi/php-base:${{ matrix.php_version }}-${{ matrix.base_image }}"
+          SIZE=$(docker images "$IMAGE" --format "{{.Size}}")
           echo "size=${SIZE}" >> $GITHUB_OUTPUT
           echo "Image size: $SIZE"
 
@@ -144,6 +147,8 @@ jobs:
 
       - name: Pull and list all image sizes
         run: |
+          # Use lowercase for repository name
+          REPO="ghcr.io/juniyadi/php-base"
           echo "========================================"
           echo "Docker Image Sizes for GitHub Packages"
           echo "========================================"
@@ -153,7 +158,7 @@ jobs:
 
           for VERSION in 8.2 8.3 8.4 8.5; do
             for BASE in alpine; do
-              IMAGE="${{ env.REGISTRY }}/${{ github.repository }}:${VERSION}-${BASE}"
+              IMAGE="${REPO}:${VERSION}-${BASE}"
               docker pull "$IMAGE" 2>/dev/null || echo "  Failed to pull: $IMAGE"
               SIZE=$(docker images "$IMAGE" --format "{{.Size}}" 2>/dev/null || echo "N/A")
               DIGEST=$(docker images "$IMAGE" --format "{{.Digest}}" 2>/dev/null | sed 's/sha256://' | cut -c1-12 || echo "N/A")
@@ -164,7 +169,7 @@ jobs:
           # Debian variants (8.4, 8.5 only)
           for VERSION in 8.4 8.5; do
             BASE="debian"
-            IMAGE="${{ env.REGISTRY }}/${{ github.repository }}:${VERSION}-${BASE}"
+            IMAGE="${REPO}:${VERSION}-${BASE}"
             docker pull "$IMAGE" 2>/dev/null || echo "  Failed to pull: $IMAGE"
             SIZE=$(docker images "$IMAGE" --format "{{.Size}}" 2>/dev/null || echo "N/A")
             DIGEST=$(docker images "$IMAGE" --format "{{.Digest}}" 2>/dev/null | sed 's/sha256://' | cut -c1-12 || echo "N/A")
@@ -178,6 +183,8 @@ jobs:
 
       - name: Create size summary
         run: |
+          # Use lowercase for repository name
+          REPO="ghcr.io/juniyadi/php-base"
           echo "## PHP Docker Image Sizes" > /tmp/size-summary.md
           echo "" >> /tmp/size-summary.md
           echo "Built on: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> /tmp/size-summary.md
@@ -187,7 +194,7 @@ jobs:
 
           for VERSION in 8.2 8.3 8.4 8.5; do
             for BASE in alpine; do
-              IMAGE="${{ env.REGISTRY }}/${{ github.repository }}:${VERSION}-${BASE}"
+              IMAGE="${REPO}:${VERSION}-${BASE}"
               SIZE=$(docker images "$IMAGE" --format "{{.Size}}" 2>/dev/null || echo "N/A")
               DIGEST=$(docker images "$IMAGE" --format "{{.Digest}}" 2>/dev/null | sed 's/sha256://' | cut -c1-12 || echo "N/A")
               echo "| PHP ${VERSION} | ${BASE} | ${SIZE} | \`${DIGEST}\` |" >> /tmp/size-summary.md
@@ -196,7 +203,7 @@ jobs:
 
           for VERSION in 8.4 8.5; do
             BASE="debian"
-            IMAGE="${{ env.REGISTRY }}/${{ github.repository }}:${VERSION}-${BASE}"
+            IMAGE="${REPO}:${VERSION}-${BASE}"
             SIZE=$(docker images "$IMAGE" --format "{{.Size}}" 2>/dev/null || echo "N/A")
             DIGEST=$(docker images "$IMAGE" --format "{{.Digest}}" 2>/dev/null | sed 's/sha256://' | cut -c1-12 || echo "N/A")
             echo "| PHP ${VERSION} | ${BASE} | ${SIZE} | \`${DIGEST}\` |" >> /tmp/size-summary.md
@@ -234,12 +241,15 @@ jobs:
 
       - name: Pull and scan image
         run: |
-          docker pull ${{ env.REGISTRY }}/${{ github.repository }}:8.5-alpine
+          # Use lowercase for repository name
+          IMAGE_LOWER=$(echo "${{ env.REGISTRY }}/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          docker pull "${IMAGE_LOWER}:8.5-alpine"
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: '${{ env.REGISTRY }}/${{ github.repository }}:8.5-alpine'
+          # Use lowercase for repository name
+          image-ref: 'ghcr.io/juniyadi/php-base:8.5-alpine'
           format: 'sarif'
           output: 'trivy-result.sarif'
           severity: 'CRITICAL,HIGH'
