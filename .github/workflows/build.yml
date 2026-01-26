@@ -211,10 +211,12 @@ jobs:
   # -----------------------------------------------
   # Job: Security Scan (Latest Alpine)
   # -----------------------------------------------
+  # Only runs on main branch push when images are pushed to registry
   security:
     name: Security Scan (8.5-alpine)
     runs-on: ubuntu-latest
     needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
       - name: Checkout repository
@@ -229,6 +231,10 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull and scan image
+        run: |
+          docker pull ${{ env.REGISTRY }}/${{ github.repository }}:8.5-alpine
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
