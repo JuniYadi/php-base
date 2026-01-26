@@ -141,19 +141,14 @@ jobs:
     needs: build
 
     steps:
-      - name: Download image sizes
-        uses: actions/download-artifact@v4
+      - name: Download all image size artifacts
+        uses: dawidd6/action-download-artifact@v6
         with:
+          workflow: ${{ github.workflow }}
+          run_id: ${{ github.run_id }}
           pattern: image-sizes-*
           path: /tmp/sizes
-          merge-multiple: true
-
-      - name: Combine all size files
-        run: |
-          # Combine all files into one, removing empty lines
-          ls -la /tmp/sizes/
-          cat /tmp/sizes/image-sizes-* 2>/dev/null | grep -v '^$' > /tmp/image-sizes.json
-          echo "Total lines: $(wc -l < /tmp/image-sizes.json)"
+          merge: true
 
       - name: Combine and display sizes
         run: |
@@ -165,7 +160,7 @@ jobs:
           echo "|---------|------|------|--------|"
 
           # Combine all JSON lines and sort by version
-          cat /tmp/image-sizes.json | sort -t'"' -k3V | while IFS= read -r line; do
+          cat /tmp/sizes/image-sizes-*.json 2>/dev/null | sort -t'"' -k3V | while IFS= read -r line; do
             VERSION=$(echo "$line" | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
             BASE=$(echo "$line" | grep -o '"base":"[^"]*"' | cut -d'"' -f4)
             SIZE=$(echo "$line" | grep -o '"size":"[^"]*"' | cut -d'"' -f4)
@@ -173,8 +168,9 @@ jobs:
             echo "| PHP ${VERSION} | ${BASE} | ${SIZE} | \`${DIGEST}\` |"
           done
 
+          TOTAL=$(ls -1 /tmp/sizes/image-sizes-*.json 2>/dev/null | wc -l)
           echo ""
-          echo "**Total Images:** $(wc -l < /tmp/image-sizes.json)"
+          echo "**Total Images:** ${TOTAL}"
           echo "**Platform:** linux/amd64"
           echo "========================================"
 
@@ -188,7 +184,7 @@ jobs:
           echo "|---------|------|------|--------|" >> /tmp/size-summary.md
 
           # Combine all JSON lines and sort by version
-          cat /tmp/image-sizes.json | sort -t'"' -k3V | while IFS= read -r line; do
+          cat /tmp/sizes/image-sizes-*.json 2>/dev/null | sort -t'"' -k3V | while IFS= read -r line; do
             VERSION=$(echo "$line" | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
             BASE=$(echo "$line" | grep -o '"base":"[^"]*"' | cut -d'"' -f4)
             SIZE=$(echo "$line" | grep -o '"size":"[^"]*"' | cut -d'"' -f4)
@@ -196,8 +192,9 @@ jobs:
             echo "| PHP ${VERSION} | ${BASE} | ${SIZE} | \`${DIGEST}\` |" >> /tmp/size-summary.md
           done
 
+          TOTAL=$(ls -1 /tmp/sizes/image-sizes-*.json 2>/dev/null | wc -l)
           echo "" >> /tmp/size-summary.md
-          echo "**Total Images:** $(wc -l < /tmp/image-sizes.json)" >> /tmp/size-summary.md
+          echo "**Total Images:** ${TOTAL}" >> /tmp/size-summary.md
           echo "**Platform:** linux/amd64" >> /tmp/size-summary.md
 
           cat /tmp/size-summary.md
