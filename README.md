@@ -156,7 +156,7 @@ CMD ["sh", "-c", "php artisan config:cache && php-fpm -D && nginx -g 'daemon off
 - `pdo`, `pdo_mysql`, `pdo_pgsql`, `pdo_sqlite`
 - `mysqli`, `mbstring`, `gd`, `intl`, `zip`
 - `bcmath`, `sockets`, `json`, `xml`, `tokenizer`
-- `xmlwriter`, `fileinfo`, `opcache`, `oniguruma`
+- `xmlwriter`, `fileinfo`, `opcache`
 
 ### Optional Extensions (Enable via ENV)
 - `redis`, `memcached`, `imagick`, `soap`
