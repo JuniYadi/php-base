@@ -1,0 +1,63 @@
+# ===============================================
+# Docker Build Context Ignore
+# ===============================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# Documentation
+README.md
+README.*
+CHANGELOG*
+LICENSE*
+docs/
+*.md
+
+# CI/CD
+.github/workflows/*.yml
+!.github/workflows/*.yml
+.github/
+
+# Testing
+coverage/
+.phpunit.cache
+phpunit.xml
+phpunit.xml.dist
+ pest.xml
+ pest.php
+
+# Build artifacts
+node_modules/
+npm-debug.log
+yarn-error.log
+dist/
+build/
+
+# IDE and editor
+.idea/
+.vscode/
+*.sublime-*
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+*.log
+
+# Temporary
+tmp/
+temp/
+*.tmp
+*.bak
+*~

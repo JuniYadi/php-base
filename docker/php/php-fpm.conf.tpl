@@ -1,0 +1,56 @@
+[global]
+; Daemon configuration
+daemonize = no
+error_log = /var/log/php-fpm/error.log
+log_level = notice
+
+; Process management
+; Dynamic process management - adjust based on container resources
+pm = dynamic
+pm.max_children = ${PHP_MAX_CHILDREN:-5}
+pm.start_servers = ${PHP_START_SERVERS:-1}
+pm.min_spare_servers = ${PHP_MIN_SPARE_SERVERS:-1}
+pm.max_spare_servers = ${PHP_MAX_SPARE_SERVERS:-3}
+pm.max_requests = ${PHP_MAX_REQUESTS:-500}
+
+; Process security
+; Chroot and chdir for isolation
+chroot =
+chdir = /var/www/html
+
+; User and group (set in Dockerfile for www-data)
+; user = www-data
+; group = www-data
+
+; Socket settings
+listen = 127.0.0.1:9000
+listen.owner = www-data
+listen.group = www-data
+listen.mode = 0660
+
+; Emergency restart
+emergency_restart_interval = ${PHP_EMERGENCY_RESTART_INTERVAL:-60s}
+emergency_restart_signal = ${PHP_EMERGENCY_RESTART_SIG:-SIGUSR1}
+
+; Process dump
+; process.dumpable = no
+
+; Access logging
+; access.log = log/$pool.access.log
+; access.format = "%R - %u %t \"%m %r\" %s"
+
+; Slow logging
+; slowlog = log/$pool.log.slow
+; request_slowlog_timeout = 5s
+; request_slowlog_trace_depth = 20
+
+; Termination timeout
+; Terminate request after this time - 0 means no limit
+request_terminate_timeout = ${PHP_REQUEST_TERMINATE_TIMEOUT:-300s}
+
+; Clear environment
+clear_env = no
+
+; Catch workers output
+decorate_workers_output = no
+catch_workers_output = yes

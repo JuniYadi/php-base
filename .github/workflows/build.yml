@@ -1,0 +1,320 @@
+# ===============================================
+# Multi-Version PHP Base Image CI/CD
+# ===============================================
+# Builds and pushes PHP 7.4-8.5 images to GitHub Container Registry
+# Supports: 7.4, 8.0, 8.1, 8.2, 8.3, 8.4, 8.5
+# Platforms: AMD64, ARM64 (native, no QEMU)
+# ===============================================
+
+name: Multi-Version PHP Build
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly rebuild for security updates
+    - cron: '0 0 * * 0'
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      php_versions:
+        description: 'PHP versions to build (comma-separated, e.g., "8.4,8.3")'
+        required: false
+        default: 'all'
+      push:
+        description: 'Push images to registry'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  REGISTRY: ghcr.io
+  # Will be set to github.repository (e.g., juniyadi/docker-php)
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # -----------------------------------------------
+  # Job: Generate Build Matrix
+  # -----------------------------------------------
+  matrix:
+    name: Generate Build Matrix
+    runs-on: ubuntu-latest
+    outputs: |
+      php_versions: ${{ steps.matrix.outputs.php_versions }}
+      platforms: ${{ steps.matrix.outputs.platforms }}
+    steps:
+      - name: Generate PHP version matrix
+        id: matrix
+        run: |
+          # Default: all supported PHP versions
+          PHP_VERSIONS='["7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"]'
+          PLATFORMS='["amd64", "arm64"]'
+
+          # For manual dispatch, use specified versions
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            INPUT_VERSIONS="${{ inputs.php_versions }}"
+            if [ "$INPUT_VERSIONS" != "all" ] && [ -n "$INPUT_VERSIONS" ]; then
+              # Convert comma-separated to JSON array
+              PHP_VERSIONS="[$(echo "$INPUT_VERSIONS" | sed 's/, /","/g' | sed 's/^/"/;s/$/"/')]"
+            fi
+          fi
+
+          # For pull requests, only build latest 3 versions to save resources
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            PHP_VERSIONS='["8.3", "8.4", "8.5"]'
+          fi
+
+          echo "PHP versions: $PHP_VERSIONS"
+          echo "Platforms: $PLATFORMS"
+
+          echo "php_versions=$PHP_VERSIONS" >> $GITHUB_OUTPUT
+          echo "platforms=$PLATFORMS" >> $GITHUB_OUTPUT
+
+  # -----------------------------------------------
+  # Job: Build All PHP Versions
+  # -----------------------------------------------
+  build:
+    name: Build PHP ${{ matrix.php }} (${{ matrix.platform }})
+    needs: matrix
+    runs-on: ${{ matrix.platform == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ${{ fromJson(needs.matrix.outputs.php_versions) }}
+        platform: ${{ fromJson(needs.matrix.outputs.platforms) }}
+        # Exclude older PHP versions from ARM64 (limited support)
+        exclude:
+          - php: "7.4"
+            platform: "arm64"
+          - php: "8.0"
+            platform: "arm64"
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
+            network=host
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        if: ${{ github.event_name == 'push' || inputs.push }}
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}
+          tags: |
+            # Version tag (e.g., 8.4)
+            type=raw,value=${{ matrix.php }}
+            # Platform-specific tag (e.g., 8.4-amd64)
+            type=raw,value=${{ matrix.php }}-${{ matrix.platform }}
+            # SHA tag for traceability
+            type=sha,prefix=${{ matrix.php }}-,format=long
+          labels: |
+            org.opencontainers.image.title=PHP ${{ matrix.php }}
+            org.opencontainers.image.description=Multi-version PHP runtime with configurable extensions
+            php.version=${{ matrix.php }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ github.event_name == 'push' || inputs.push }}
+          platforms: linux/${{ matrix.platform }}
+          build-args: |
+            PHP_VERSION=${{ matrix.php }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Cache scope per PHP version for efficient layer caching
+          cache-from: type=gha,scope=php-${{ matrix.php }}-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=php-${{ matrix.php }}-${{ matrix.platform }}
+          provenance: false
+
+      - name: Image digest
+        run: |
+          echo "Image digest: ${{ steps.build.outputs.digest }}"
+
+      - name: Upload artifact for manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-${{ matrix.php }}-${{ matrix.platform }}
+          path: |
+            /tmp/image-${{ matrix.php }}-${{ matrix.platform }}.txt
+          retention-days: 1
+
+  # -----------------------------------------------
+  # Job: Create Multi-Arch Manifests
+  # -----------------------------------------------
+  manifest:
+    name: Create Manifests
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        if: ${{ github.event_name == 'push' || inputs.push }}
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/artifacts
+          pattern: image-*
+          merge-multiple: true
+
+      - name: Create and push manifests
+        if: ${{ github.event_name == 'push' || inputs.push }}
+        run: |
+          IMAGE_BASE="${{ env.REGISTRY }}/${{ github.repository }}"
+
+          # Get list of built PHP versions
+          PHP_VERSIONS=$(ls /tmp/artifacts/*.txt 2>/dev/null | sed 's|/tmp/artifacts/image-\(.*\)-.*\.txt|\1|' | sort -u)
+
+          echo "Creating manifests for PHP versions: $PHP_VERSIONS"
+
+          for PHP_VERSION in $PHP_VERSIONS; do
+            echo "=== Creating manifest for PHP ${PHP_VERSION} ==="
+
+            AMD64_DIGEST=$(cat /tmp/artifacts/image-${PHP_VERSION}-amd64.txt 2>/dev/null | head -1)
+            ARM64_DIGEST=$(cat /tmp/artifacts/image-${PHP_VERSION}-arm64.txt 2>/dev/null | head -1)
+
+            # Build image references
+            AMD64_REF="${IMAGE_BASE}:${PHP_VERSION}-amd64"
+            ARM64_REF="${IMAGE_BASE}:${PHP_VERSION}-arm64"
+
+            # Push platform-specific images first (already pushed by build job, just create aliases)
+            if [ -n "$AMD64_DIGEST" ]; then
+              docker buildx imagetools create \
+                --tag "${IMAGE_BASE}:${PHP_VERSION}-amd64" \
+                "$AMD64_DIGEST" || true
+            fi
+
+            if [ -n "$ARM64_DIGEST" ]; then
+              docker buildx imagetools create \
+                --tag "${IMAGE_BASE}:${PHP_VERSION}-arm64" \
+                "$ARM64_DIGEST" || true
+            fi
+
+            # Create multi-arch manifest
+            if [ -n "$AMD64_DIGEST" ] && [ -n "$ARM64_DIGEST" ]; then
+              docker buildx imagetools create \
+                --tag "${IMAGE_BASE}:${PHP_VERSION}" \
+                "$AMD64_REF" \
+                "$ARM64_REF"
+
+              echo "Created multi-arch manifest: ${IMAGE_BASE}:${PHP_VERSION}"
+
+              # Create latest alias for the highest version
+              if [ "$PHP_VERSION" = "8.5" ]; then
+                docker buildx imagetools create \
+                  --tag "${IMAGE_BASE}:latest" \
+                  "$AMD64_REF" \
+                  "$ARM64_REF"
+                echo "Created latest alias: ${IMAGE_BASE}:latest"
+              fi
+            elif [ -n "$AMD64_DIGEST" ]; then
+              # Only AMD64 available
+              docker buildx imagetools create \
+                --tag "${IMAGE_BASE}:${PHP_VERSION}" \
+                "$AMD64_REF"
+              echo "Created AMD64-only manifest: ${IMAGE_BASE}:${PHP_VERSION}"
+            elif [ -n "$ARM64_DIGEST" ]; then
+              # Only ARM64 available
+              docker buildx imagetools create \
+                --tag "${IMAGE_BASE}:${PHP_VERSION}" \
+                "$ARM64_REF"
+              echo "Created ARM64-only manifest: ${IMAGE_BASE}:${PHP_VERSION}"
+            fi
+          done
+
+      - name: Verify manifests
+        run: |
+          IMAGE_BASE="${{ env.REGISTRY }}/${{ github.repository }}"
+          echo "=== Image Manifests ==="
+
+          for PHP_VERSION in 7.4 8.0 8.1 8.2 8.3 8.4 8.5; do
+            if docker manifest inspect "${IMAGE_BASE}:${PHP_VERSION}" >/dev/null 2>&1; then
+              echo "${IMAGE_BASE}:${PHP_VERSION}"
+              docker buildx imagetools inspect "${IMAGE_BASE}:${PHP_VERSION}" --format '  Platforms: {{ range .Manifests }}{{ .Platform.OS }}/{{ .Platform.Architecture }} {{ end }}'
+            fi
+          done
+
+          if docker manifest inspect "${IMAGE_BASE}:latest" >/dev/null 2>&1; then
+            echo "${IMAGE_BASE}:latest"
+            docker buildx imagetools inspect "${IMAGE_BASE}:latest" --format '  Platforms: {{ range .Manifests }}{{ .Platform.OS }}/{{ .Platform.Architecture }} {{ end }}'
+          fi
+
+  # -----------------------------------------------
+  # Job: Security Scan
+  # -----------------------------------------------
+  security:
+    name: Security Scan (PHP ${{ matrix.php }})
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ${{ fromJson(needs.matrix.outputs.php_versions) }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ env.REGISTRY }}/${{ github.repository }}:${{ matrix.php }}'
+          format: 'sarif'
+          output: 'trivy-result-${{ matrix.php }}.sarif'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-result-${{ matrix.php }}.sarif'
+          category: 'trivy/php-${{ matrix.php }}'
