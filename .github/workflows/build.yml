@@ -141,15 +141,20 @@ jobs:
     needs: build
 
     steps:
-      - name: Download image size artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: /tmp/sizes
-
-      - name: Combine image sizes
+      - name: Download image size artifacts via API
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          # Combine only image-sizes-* files (not dockerbuild)
-          find /tmp/sizes -name 'image-sizes-*.json' -exec cat {} \; > /tmp/image-sizes.json 2>/dev/null || true
+          # Get all artifact IDs matching image-sizes-*
+          for art in $(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts --paginate | jq -r '.artifacts[] | select(.name | startswith("image-sizes-")) | .id'); do
+            echo "Downloading artifact $art"
+            gh api repos/${{ github.repository }}/actions/artifacts/$art/zip --header "Accept: application/zip" -o /tmp/sizes-$art.zip 2>/dev/null
+            unzip -q /tmp/sizes-$art.zip -d /tmp/sizes/ 2>/dev/null
+            rm -f /tmp/sizes-$art.zip
+          done
+
+          # Combine all JSON files
+          find /tmp/sizes -name '*.json' -exec cat {} \; > /tmp/image-sizes.json
           echo "Found $(wc -l < /tmp/image-sizes.json) image sizes"
 
       - name: Combine and display sizes
