@@ -104,7 +104,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: ${{ github.event_name == 'push' || inputs.push }}
+          push: ${{ github.event_name == 'push' || inputs.push == true }}
           platforms: linux/amd64
           build-args: |
             PHP_VERSION=${{ matrix.php_version }}
