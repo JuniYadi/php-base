@@ -5,6 +5,11 @@
 # Base Images: Alpine (default) and Debian
 # Platforms: Multi-arch (AMD64 + ARM64)
 # ARM64 uses native ubuntu-24.04-arm runners for faster builds
+#
+# CI Strategy:
+# - Pull Requests: Build only (no push), use cache for fast validation
+# - Main Branch: Build AND push to registry, create manifest lists
+# - Schedule: Weekly build with push (security updates)
 # ===============================================
 
 name: Multi-Version PHP Build
@@ -22,7 +27,7 @@ on:
   workflow_dispatch:
     inputs:
       push:
-        description: 'Push images to registry'
+        description: 'Push images to registry (only works on main branch)'
         required: false
         type: boolean
         default: false
@@ -114,7 +119,9 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: ${{ github.event_name == 'push' || inputs.push == true }}
+          # Only push on main branch push or manual dispatch with push=true
+          # PRs and schedule builds will build without pushing (cache still works)
+          push: ${{ (github.event_name == 'push' || inputs.push == true) && github.ref == 'refs/heads/main' }}
           # Build for the specific architecture (native ARM64 runner or AMD64)
           platforms: linux/${{ matrix.arch }}
           build-args: |
@@ -217,11 +224,13 @@ jobs:
   # -----------------------------------------------
   # Job: Create Multi-Arch Manifest Lists
   # -----------------------------------------------
-  # Combines AMD64 and ARM64 images into manifest lists
+  # Only runs on main branch push (when images are actually pushed)
+  # PRs skip this - manifests would be incomplete
   create-manifests:
     name: Create Manifest Lists
     runs-on: ubuntu-24.04
     needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
       - name: Set up Docker Buildx
