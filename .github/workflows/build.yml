@@ -165,6 +165,54 @@ jobs:
           chmod +x check-image-sizes.sh
           ./check-image-sizes.sh
 
+      - name: Update README with image sizes
+        run: |
+          # Generate size table (arch-specific only)
+          {
+            echo "| Version | Base | Arch | Size |"
+            echo "|---------|------|------|------|"
+            for img in 8.2-alpine-amd64 8.2-alpine-arm64 8.3-alpine-amd64 8.3-alpine-arm64 8.4-alpine-amd64 8.4-alpine-arm64 8.4-debian-amd64 8.4-debian-arm64 8.5-alpine-amd64 8.5-alpine-arm64 8.5-debian-amd64 8.5-debian-arm64; do
+              version=$(echo "$img" | cut -d'-' -f1)
+              base=$(echo "$img" | cut -d'-' -f2)
+              arch=$(echo "$img" | cut -d'-' -f3)
+              size_bytes=$(docker manifest inspect "${REGISTRY}/${IMAGE_NAME}:${img}" | jq -r '[.layers[]?.size] | add')
+              size_formatted=$(echo "$size_bytes" | awk '{printf "%.1f MB", $1/1024/1024}')
+              echo "| PHP ${version} | ${base} | ${arch} | ${size_formatted} |"
+            done
+          } > /tmp/size-table.md
+
+          # Build complete README section
+          {
+            echo "## Image Sizes"
+            echo ""
+            echo "<!-- SIZE_TABLE_START -->"
+            echo "<!-- This section is auto-updated by CI. Do not edit manually. -->"
+            echo ""
+            cat /tmp/size-table.md
+            echo ""
+            echo "<!-- SIZE_TABLE_END -->"
+          } > /tmp/readme-section.md
+
+          # Replace section in README.md
+          awk '
+            /<!-- SIZE_TABLE_START -->/ { in_section=1; print; while ((getline line < "/tmp/readme-section.md") > 0) print line; close("/tmp/readme-section.md"); next }
+            /<!-- SIZE_TABLE_END -->/ { in_section=0; next }
+            !in_section { print }
+          ' README.md > /tmp/README-new.md && mv /tmp/README-new.md README.md
+
+          # Show the update
+          echo ""
+          echo "README.md updated with image sizes:"
+          sed -n '/<!-- SIZE_TABLE_START -->/,/<!-- SIZE_TABLE_END -->/p' README.md
+
+      - name: Commit README changes
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add README.md
+          git commit -m "docs: update image sizes [skip ci]" || echo "No changes to commit"
+          git push origin main || echo "No changes to push"
+
   # -----------------------------------------------
   # Job: Create Multi-Arch Manifest Lists
   # -----------------------------------------------

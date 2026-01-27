@@ -14,6 +14,12 @@ Multi-version PHP base image with Nginx, PHP-FPM, and configurable extensions. P
 | 8.0 | EOL | ✅ | ❌ |
 | 7.4 | EOL | ✅ | ❌ |
 
+## Image Sizes
+
+<!-- SIZE_TABLE_START -->
+<!-- This section is auto-updated by CI. Do not edit manually. -->
+<!-- SIZE_TABLE_END -->
+
 ## Quick Start
 
 ```bash
