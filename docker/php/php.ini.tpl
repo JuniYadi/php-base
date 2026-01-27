@@ -36,6 +36,8 @@ opcache.save_comments=1
 file_uploads = On
 upload_tmp_dir = /tmp
 
-; Basic functions
-disable_functions = ${PHP_DISABLE_FUNCTIONS:-}
+; Basic security - dangerous command execution functions
+; These functions allow arbitrary command execution and should remain disabled in production
+; Can be overridden via PHP_DISABLE_FUNCTIONS env var (warning shown at startup if overridden)
+disable_functions = ${PHP_DISABLE_FUNCTIONS:-exec,shell_exec,system,passthru,proc_open,popen,curl_multi_exec,pcntl_exec}
 disable_classes = ${PHP_DISABLE_CLASSES:-}

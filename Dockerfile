@@ -42,13 +42,14 @@ RUN docker-php-ext-configure gd \
         --with-freetype \
         --with-jpeg
 
-# Install core extensions
+# Install core extensions (includes curl for Laravel HTTP client)
 RUN docker-php-ext-install -j$(nproc) \
         pdo \
         pdo_mysql \
         pdo_pgsql \
         pdo_sqlite \
-        mysqli
+        mysqli \
+        curl
 
 RUN docker-php-ext-install -j$(nproc) \
         mbstring \
