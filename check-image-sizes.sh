@@ -155,7 +155,7 @@ for img in "${IMAGES[@]}"; do
     full_tag="${REGISTRY}/${IMAGE_NAME}:${img}"
 
     if [ "$size_bytes" != "N/A" ]; then
-        ((total_arch_images++))
+        total_arch_images=$((total_arch_images + 1))
     fi
 
     printf "| %-8s | %-8s | %-8s | %-12s | %-20s |\n" "$version" "$base" "$arch" "$formatted" "$full_tag"
@@ -176,7 +176,7 @@ for manifest in "${MANIFESTS[@]}"; do
     full_tag="${REGISTRY}/${IMAGE_NAME}:${manifest}"
 
     if [ "$size_bytes" != "N/A" ]; then
-        ((total_manifests++))
+        total_manifests=$((total_manifests + 1))
     fi
 
     printf "| %-15s | %-15s | %-20s |\n" "$manifest" "$formatted" "$full_tag"
