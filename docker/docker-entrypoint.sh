@@ -12,6 +12,92 @@ echo "=== PHP Base Image Entrypoint ==="
 echo "PHP Version: $(php -r 'echo PHP_VERSION;')"
 
 # ===============================================
+# Check OpenSSL Version and Availability
+# ===============================================
+check_openssl() {
+    echo "Checking OpenSSL availability..."
+
+    # Check if OpenSSL extension is loaded
+    if php -r 'exit(extension_loaded("openssl") ? 0 : 1);' 2>/dev/null; then
+        echo "✓ OpenSSL extension: LOADED"
+
+        # Get OpenSSL version from PHP
+        local openssl_version=$(php -r 'echo OPENSSL_VERSION_TEXT;' 2>/dev/null)
+        echo "  Version: $openssl_version"
+
+        # Check if OpenSSL version is relatively recent (check for known vulnerabilities)
+        # OpenSSL 1.1.1+ and 3.0+ are considered secure
+        local version_number=$(php -r 'echo OPENSSL_VERSION_NUMBER;' 2>/dev/null)
+        local openssl_major=$(php -r 'echo (int)substr(OPENSSL_VERSION_TEXT, -9, 1);' 2>/dev/null)
+
+        if [ "$openssl_major" -ge 3 ] 2>/dev/null; then
+            echo "  Status: ✓ Modern (3.x series - latest security features)"
+        elif php -r 'exit(version_compare(OPENSSL_VERSION_TEXT, "1.1.1", ">=") ? 0 : 1);' 2>/dev/null; then
+            echo "  Status: ✓ Secure (1.1.1+ series)"
+        else
+            echo "  Status: ⚠ WARNING - OpenSSL version may be outdated"
+            echo "  Recommendation: Update to OpenSSL 1.1.1+ or 3.0+"
+        fi
+    else
+        echo "✗ OpenSSL extension: NOT LOADED"
+        echo "  Impact: HTTPS requests, encryption, and signed JWT tokens will not work"
+        echo "  Action: Install with 'docker-php-ext-install openssl' (usually in base image)"
+    fi
+
+    # Also check system OpenSSL binary
+    if command -v openssl >/dev/null 2>&1; then
+        local system_openssl=$(openssl version 2>/dev/null)
+        echo "  System binary: $system_openssl"
+    fi
+
+    echo ""
+}
+
+check_openssl
+
+# ===============================================
+# Check and Warn About Security Overrides
+# ===============================================
+check_security_overrides() {
+    echo "Checking security configuration overrides..."
+
+    local has_override=0
+
+    # Check PHP_DISABLE_FUNCTIONS override
+    if [ -n "$PHP_DISABLE_FUNCTIONS" ]; then
+        echo "⚠️  WARNING: PHP_DISABLE_FUNCTIONS override detected!"
+        echo "   Value: $PHP_DISABLE_FUNCTIONS"
+        echo "   Impact: Security restrictions may be reduced"
+        echo "   Recommendation: Use default secure settings unless required"
+        has_override=1
+    fi
+
+    # Check PHP_DISABLE_CLASSES override
+    if [ -n "$PHP_DISABLE_CLASSES" ]; then
+        echo "⚠️  WARNING: PHP_DISABLE_CLASSES override detected!"
+        echo "   Value: $PHP_DISABLE_CLASSES"
+        echo "   Impact: Class restrictions may be reduced"
+        has_override=1
+    fi
+
+    # Check if dangerous functions are being re-enabled
+    local default_dangerous="exec shell_exec system passthru proc_open popen"
+    if [ -n "$PHP_DISABLE_FUNCTIONS" ]; then
+        for func in $default_dangerous; do
+            if echo "$PHP_DISABLE_FUNCTIONS" | grep -qv "$func"; then
+                echo "🔴 SECURITY: '$func' has been ENABLED - Command execution is possible!"
+            fi
+        done
+    else
+        echo "✓ Default: Dangerous command execution functions are disabled"
+    fi
+
+    [ $has_override -eq 1 ] && echo ""
+}
+
+check_security_overrides
+
+# ===============================================
 # Helper: Check if extension is available
 # ===============================================
 is_extension_available() {

@@ -27,12 +27,12 @@ FROM php-base-${BASE_IMAGE} AS php-base
 ARG BASE_IMAGE
 RUN if [ "${BASE_IMAGE}" = "debian" ]; then \
         apt-get update && apt-get install -y --no-install-recommends \
-            curl libzip-dev libpng-dev libjpeg-dev libfreetype6-dev \
+            libcurl4-openssl-dev libzip-dev libpng-dev libjpeg-dev libfreetype6-dev \
             libicu-dev libsqlite3-dev libpq-dev libonig-dev libxml2-dev && \
         rm -rf /var/lib/apt/lists/* /tmp/*; \
     else \
         apk add --no-cache \
-            curl libzip-dev libpng-dev libjpeg-turbo-dev freetype-dev \
+            curl-dev libzip-dev libpng-dev libjpeg-turbo-dev freetype-dev \
             icu-dev sqlite-dev postgresql-dev oniguruma-dev linux-headers libxml2-dev && \
         rm -rf /var/cache/apk/* /tmp/*; \
     fi
@@ -42,13 +42,14 @@ RUN docker-php-ext-configure gd \
         --with-freetype \
         --with-jpeg
 
-# Install core extensions
+# Install core extensions (includes curl for Laravel HTTP client)
 RUN docker-php-ext-install -j$(nproc) \
         pdo \
         pdo_mysql \
         pdo_pgsql \
         pdo_sqlite \
-        mysqli
+        mysqli \
+        curl
 
 RUN docker-php-ext-install -j$(nproc) \
         mbstring \
