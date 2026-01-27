@@ -44,7 +44,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  # Force lowercase for image names (GitHub Packages is case-insensitive but paths must match)
+  IMAGE_NAME: ${{ github.repository.toLowerCase() }}
 
 jobs:
   # -----------------------------------------------
@@ -99,8 +100,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          # Use lowercase for repository name
-          images: ghcr.io/juniyadi/php-base
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             # Architecture-specific tag (will be combined into multi-arch manifest)
             type=raw,value=${{ matrix.php_version }}-${{ matrix.base_image }}-${{ matrix.arch }}
@@ -136,8 +136,7 @@ jobs:
       - name: Get image size
         id: image-size
         run: |
-          # Use lowercase for repository name
-          IMAGE="ghcr.io/juniyadi/php-base:${{ matrix.php_version }}-${{ matrix.base_image }}-${{ matrix.arch }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.php_version }}-${{ matrix.base_image }}-${{ matrix.arch }}"
           SIZE=$(docker images "$IMAGE" --format "{{.Size}}")
           DIGEST=$(docker images "$IMAGE" --format "{{.Digest}}" | sed 's/sha256://' | cut -c1-12)
           # Save to JSON for list-sizes job (include architecture)
@@ -250,6 +249,8 @@ jobs:
           # Define all version/base combinations
           VERSIONS=("8.2" "8.3" "8.4" "8.5")
           BASES=("alpine" "debian")
+          REGISTRY="${{ env.REGISTRY }}"
+          IMAGE_NAME="${{ env.IMAGE_NAME }}"
 
           for VERSION in "${VERSIONS[@]}"; do
             for BASE in "${BASES[@]}"; do
@@ -262,27 +263,29 @@ jobs:
 
               # Create manifest list combining both architectures
               docker buildx imagetools create \
-                ghcr.io/juniyadi/php-base:${VERSION}-${BASE}-amd64 \
-                ghcr.io/juniyadi/php-base:${VERSION}-${BASE}-arm64 \
-                -t ghcr.io/juniyadi/php-base:${VERSION}-${BASE}
+                ${REGISTRY}/${IMAGE_NAME}:${VERSION}-${BASE}-amd64 \
+                ${REGISTRY}/${IMAGE_NAME}:${VERSION}-${BASE}-arm64 \
+                -t ${REGISTRY}/${IMAGE_NAME}:${VERSION}-${BASE}
             done
           done
 
           # Create latest and alpine tags from 8.5-alpine
           echo "Creating latest/alpine tags..."
           docker buildx imagetools create \
-            ghcr.io/juniyadi/php-base:8.5-alpine-amd64 \
-            ghcr.io/juniyadi/php-base:8.5-alpine-arm64 \
-            -t ghcr.io/juniyadi/php-base:latest \
-            -t ghcr.io/juniyadi/php-base:alpine
+            ${REGISTRY}/${IMAGE_NAME}:8.5-alpine-amd64 \
+            ${REGISTRY}/${IMAGE_NAME}:8.5-alpine-arm64 \
+            -t ${REGISTRY}/${IMAGE_NAME}:latest \
+            -t ${REGISTRY}/${IMAGE_NAME}:alpine
 
           echo "Manifest lists created successfully!"
 
       - name: Verify manifests
         run: |
+          REGISTRY="${{ env.REGISTRY }}"
+          IMAGE_NAME="${{ env.IMAGE_NAME }}"
           echo "Verifying multi-arch images..."
           for TAG in 8.5-alpine 8.5-debian 8.4-alpine 8.3-alpine 8.2-alpine latest alpine; do
-            MANIFEST=$(docker manifest inspect ghcr.io/juniyadi/php-base:${TAG} 2>/dev/null)
+            MANIFEST=$(docker manifest inspect ${REGISTRY}/${IMAGE_NAME}:${TAG} 2>/dev/null)
             if [ -n "$MANIFEST" ]; then
               AMD64=$(echo "$MANIFEST" | grep -c '"architecture": "amd64"' || echo "0")
               ARM64=$(echo "$MANIFEST" | grep -c '"architecture": "arm64"' || echo "0")
@@ -320,16 +323,15 @@ jobs:
 
       - name: Pull and scan image
         run: |
-          # Use lowercase for repository name - pull multi-arch manifest (auto-selects arch)
-          IMAGE_LOWER=$(echo "${{ env.REGISTRY }}/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          docker pull "${IMAGE_LOWER}:8.5-alpine"
+          # Use consistent image name from env
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:8.5-alpine"
+          docker pull "${IMAGE}"
           # Note: No -amd64 suffix needed - manifest list pulls correct arch automatically
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          # Use lowercase for repository name
-          image-ref: 'ghcr.io/juniyadi/php-base:8.5-alpine'
+          image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:8.5-alpine'
           format: 'sarif'
           output: 'trivy-result.sarif'
           severity: 'CRITICAL,HIGH'
