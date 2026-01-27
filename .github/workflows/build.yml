@@ -267,6 +267,7 @@ jobs:
 
               # Create multi-arch manifest (combines AMD64 + ARM64)
               docker buildx imagetools create \
+                --annotation "org.opencontainers.image.description=Multi-version PHP ${VERSION} runtime with ${BASE} base" \
                 ${REGISTRY}/${IMAGE_NAME}:${VERSION}-${BASE}-amd64 \
                 ${REGISTRY}/${IMAGE_NAME}:${VERSION}-${BASE}-arm64 \
                 -t ${REGISTRY}/${IMAGE_NAME}:${VERSION}-${BASE}
@@ -276,6 +277,7 @@ jobs:
           # Create version-only tag (defaults to 8.5-debian multi-arch)
           echo "Creating version-only tags..."
           docker buildx imagetools create \
+            --annotation "org.opencontainers.image.description=Multi-version PHP 8.5 runtime with debian base" \
             ${REGISTRY}/${IMAGE_NAME}:8.5-debian-amd64 \
             ${REGISTRY}/${IMAGE_NAME}:8.5-debian-arm64 \
             -t ${REGISTRY}/${IMAGE_NAME}:8.5
@@ -283,6 +285,7 @@ jobs:
           # Create latest tag from 8.5-debian (glibc compatibility)
           echo "Creating latest tag..."
           docker buildx imagetools create \
+            --annotation "org.opencontainers.image.description=Multi-version PHP runtime with debian base" \
             ${REGISTRY}/${IMAGE_NAME}:8.5-debian-amd64 \
             ${REGISTRY}/${IMAGE_NAME}:8.5-debian-arm64 \
             -t ${REGISTRY}/${IMAGE_NAME}:latest
