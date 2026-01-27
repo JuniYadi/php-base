@@ -153,10 +153,12 @@ jobs:
   # -----------------------------------------------
   # Job: List All Image Sizes (from build artifacts)
   # -----------------------------------------------
+  # Only runs on main branch push when images are actually pushed to registry
   list-sizes:
     name: List Image Sizes
     runs-on: ubuntu-24.04
     needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
       - name: Download all image size artifacts
@@ -172,18 +174,12 @@ jobs:
           echo "Docker Image Sizes for GitHub Packages"
           echo "========================================"
           echo ""
-          echo "Debug: Checking /tmp/sizes directory..."
-          ls -la /tmp/sizes/ 2>/dev/null || echo "Directory empty or not found"
-          echo ""
           echo "| Version | Base | Arch | Size | Digest |"
           echo "|---------|------|------|------|--------|"
 
           # Process each JSON file (find recursively)
           for file in $(find /tmp/sizes -name "*.json" 2>/dev/null); do
             if [ -f "$file" ]; then
-              echo "Debug: Processing $file"
-              cat "$file" 2>/dev/null || echo "Cannot read file"
-              echo ""
               VERSION=$(jq -r '.version' "$file")
               BASE=$(jq -r '.base' "$file")
               ARCH=$(jq -r '.arch' "$file")
