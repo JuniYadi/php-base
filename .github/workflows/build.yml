@@ -145,7 +145,8 @@ jobs:
       - name: Upload image sizes
         uses: actions/upload-artifact@v4
         with:
-          name: image-sizes-${{ matrix.php_version }}-${{ matrix.base_image }}
+          # Include architecture to avoid conflicts between AMD64 and ARM64 builds
+          name: image-sizes-${{ matrix.php_version }}-${{ matrix.base_image }}-${{ matrix.arch }}
           path: /tmp/image-sizes.json
           retention-days: 1
 
@@ -162,7 +163,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: /tmp/sizes
-          pattern: image-sizes-*
+          pattern: image-sizes-*-*
           merge-multiple: true
 
       - name: Combine and display sizes
