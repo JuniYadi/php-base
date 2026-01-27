@@ -3,7 +3,8 @@
 # ===============================================
 # Builds: PHP 8.2, 8.3, 8.4, 8.5
 # Base Images: Alpine (default) and Debian
-# Platforms: AMD64 only (for GitHub Packages)
+# Platforms: Multi-arch (AMD64 + ARM64)
+# ARM64 uses native ubuntu-24.04-arm runners for faster builds
 # ===============================================
 
 name: Multi-Version PHP Build
@@ -45,13 +46,15 @@ jobs:
   # Job: Build PHP Images (Matrix)
   # -----------------------------------------------
   build:
-    name: Build PHP ${{ matrix.php_version }} (${{ matrix.base_image }})
-    runs-on: ubuntu-24.04
+    name: Build PHP ${{ matrix.php_version }} (${{ matrix.base_image }}-${{ matrix.arch }})
+    # Use native ARM64 runner for ARM builds, standard runner for AMD64
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     strategy:
       fail-fast: false
       matrix:
         php_version: ['8.2', '8.3', '8.4', '8.5']
         base_image: ['alpine', 'debian']
+        arch: ['amd64', 'arm64']
         exclude:
           # Only build Debian for latest versions (8.4, 8.5)
           - php_version: '8.2'
@@ -61,6 +64,11 @@ jobs:
         include:
           - php_version: '8.5'
             base_image: 'alpine'
+            arch: 'amd64'
+            is_latest: true
+          - php_version: '8.5'
+            base_image: 'alpine'
+            arch: 'arm64'
             is_latest: true
 
     permissions:
@@ -89,41 +97,44 @@ jobs:
           # Use lowercase for repository name
           images: ghcr.io/juniyadi/php-base
           tags: |
-            type=raw,value=${{ matrix.php_version }}-${{ matrix.base_image }}
-            type=raw,value=${{ matrix.php_version }}-${{ matrix.base_image }}-amd64
-            type=sha,prefix=${{ matrix.php_version }}-${{ matrix.base_image }}-,format=long
+            # Architecture-specific tag (will be combined into multi-arch manifest)
+            type=raw,value=${{ matrix.php_version }}-${{ matrix.base_image }}-${{ matrix.arch }}
+            type=sha,prefix=${{ matrix.php_version }}-${{ matrix.base_image }}-${{ matrix.arch }}-,format=long
+            # Latest/alpine tags only from PHP 8.5 Alpine (both archs will point to these)
             ${{ matrix.is_latest == true && matrix.base_image == 'alpine' && 'type=raw,value=latest' || '' }}
             ${{ matrix.is_latest == true && matrix.base_image == 'alpine' && 'type=raw,value=alpine' || '' }}
           labels: |
-            org.opencontainers.image.title=PHP ${{ matrix.php_version }} (${{ matrix.base_image }})
+            org.opencontainers.image.title=PHP ${{ matrix.php_version }} (${{ matrix.base_image }}-${{ matrix.arch }})
             org.opencontainers.image.description=Multi-version PHP runtime with ${{ matrix.base_image }} base
             php.version=${{ matrix.php_version }}
             base.image=${{ matrix.base_image }}
+            os.arch=${{ matrix.arch }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
           push: ${{ github.event_name == 'push' || inputs.push == true }}
-          platforms: linux/amd64
+          # Build for the specific architecture (native ARM64 runner or AMD64)
+          platforms: linux/${{ matrix.arch }}
           build-args: |
             PHP_VERSION=${{ matrix.php_version }}
             BASE_IMAGE=${{ matrix.base_image }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=php-${{ matrix.php_version }}-${{ matrix.base_image }}-amd64
-          cache-to: type=gha,mode=max,scope=php-${{ matrix.php_version }}-${{ matrix.base_image }}-amd64
+          cache-from: type=gha,scope=php-${{ matrix.php_version }}-${{ matrix.base_image }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=php-${{ matrix.php_version }}-${{ matrix.base_image }}-${{ matrix.arch }}
           provenance: false
 
       - name: Get image size
         id: image-size
         run: |
           # Use lowercase for repository name
-          IMAGE="ghcr.io/juniyadi/php-base:${{ matrix.php_version }}-${{ matrix.base_image }}"
+          IMAGE="ghcr.io/juniyadi/php-base:${{ matrix.php_version }}-${{ matrix.base_image }}-${{ matrix.arch }}"
           SIZE=$(docker images "$IMAGE" --format "{{.Size}}")
           DIGEST=$(docker images "$IMAGE" --format "{{.Digest}}" | sed 's/sha256://' | cut -c1-12)
-          # Save to JSON for list-sizes job
-          echo "{\"version\":\"${{ matrix.php_version }}\",\"base\":\"${{ matrix.base_image }}\",\"size\":\"${SIZE}\",\"digest\":\"${DIGEST}\"}" >> /tmp/image-sizes.json
+          # Save to JSON for list-sizes job (include architecture)
+          echo "{\"version\":\"${{ matrix.php_version }}\",\"base\":\"${{ matrix.base_image }}\",\"arch\":\"${{ matrix.arch }}\",\"size\":\"${SIZE}\",\"digest\":\"${DIGEST}\"}" >> /tmp/image-sizes.json
 
       - name: Upload image sizes
         uses: actions/upload-artifact@v4
@@ -154,24 +165,25 @@ jobs:
           echo "Docker Image Sizes for GitHub Packages"
           echo "========================================"
           echo ""
-          echo "| Version | Base | Size | Digest |"
-          echo "|---------|------|------|--------|"
+          echo "| Version | Base | Arch | Size | Digest |"
+          echo "|---------|------|------|------|--------|"
 
           # Process each JSON file
           for file in /tmp/sizes/*.json; do
             if [ -f "$file" ]; then
               VERSION=$(jq -r '.version' "$file")
               BASE=$(jq -r '.base' "$file")
+              ARCH=$(jq -r '.arch' "$file")
               SIZE=$(jq -r '.size' "$file")
               DIGEST=$(jq -r '.digest' "$file")
-              echo "| PHP ${VERSION} | ${BASE} | ${SIZE} | \`${DIGEST}\` |"
+              echo "| PHP ${VERSION} | ${BASE} | ${ARCH} | ${SIZE} | \`${DIGEST}\` |"
             fi
           done
 
           TOTAL=$(ls -1 /tmp/sizes/*.json 2>/dev/null | wc -l)
           echo ""
           echo "**Total Images:** ${TOTAL}"
-          echo "**Platform:** linux/amd64"
+          echo "**Platforms:** linux/amd64, linux/arm64 (multi-arch)"
           echo "========================================"
 
       - name: Create size summary
@@ -180,26 +192,96 @@ jobs:
           echo "" >> /tmp/size-summary.md
           echo "Built on: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> /tmp/size-summary.md
           echo "" >> /tmp/size-summary.md
-          echo "| Version | Base | Size | Digest |" >> /tmp/size-summary.md
-          echo "|---------|------|------|--------|" >> /tmp/size-summary.md
+          echo "| Version | Base | Arch | Size | Digest |" >> /tmp/size-summary.md
+          echo "|---------|------|------|------|--------|" >> /tmp/size-summary.md
 
           # Process each JSON file
           for file in /tmp/sizes/*.json; do
             if [ -f "$file" ]; then
               VERSION=$(jq -r '.version' "$file")
               BASE=$(jq -r '.base' "$file")
+              ARCH=$(jq -r '.arch' "$file")
               SIZE=$(jq -r '.size' "$file")
               DIGEST=$(jq -r '.digest' "$file")
-              echo "| PHP ${VERSION} | ${BASE} | ${SIZE} | \`${DIGEST}\` |" >> /tmp/size-summary.md
+              echo "| PHP ${VERSION} | ${BASE} | ${ARCH} | ${SIZE} | \`${DIGEST}\` |" >> /tmp/size-summary.md
             fi
           done
 
           TOTAL=$(ls -1 /tmp/sizes/*.json 2>/dev/null | wc -l)
           echo "" >> /tmp/size-summary.md
           echo "**Total Images:** ${TOTAL}" >> /tmp/size-summary.md
-          echo "**Platform:** linux/amd64" >> /tmp/size-summary.md
+          echo "**Platforms:** linux/amd64, linux/arm64 (multi-arch)" >> /tmp/size-summary.md
 
           cat /tmp/size-summary.md
+
+  # -----------------------------------------------
+  # Job: Create Multi-Arch Manifest Lists
+  # -----------------------------------------------
+  # Combines AMD64 and ARM64 images into manifest lists
+  create-manifests:
+    name: Create Manifest Lists
+    runs-on: ubuntu-24.04
+    needs: build
+
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create manifest lists
+        run: |
+          echo "Creating multi-arch manifest lists..."
+
+          # Define all version/base combinations
+          VERSIONS=("8.2" "8.3" "8.4" "8.5")
+          BASES=("alpine" "debian")
+
+          for VERSION in "${VERSIONS[@]}"; do
+            for BASE in "${BASES[@]}"; do
+              # Skip Debian for older versions (8.2, 8.3)
+              if [[ "$VERSION" == "8.2" || "$VERSION" == "8.3" ]] && [[ "$BASE" == "debian" ]]; then
+                continue
+              fi
+
+              echo "Creating manifest for: ${VERSION}-${BASE}"
+
+              # Create manifest list combining both architectures
+              docker buildx imagetools create \
+                ghcr.io/juniyadi/php-base:${VERSION}-${BASE}-amd64 \
+                ghcr.io/juniyadi/php-base:${VERSION}-${BASE}-arm64 \
+                -t ghcr.io/juniyadi/php-base:${VERSION}-${BASE}
+            done
+          done
+
+          # Create latest and alpine tags from 8.5-alpine
+          echo "Creating latest/alpine tags..."
+          docker buildx imagetools create \
+            ghcr.io/juniyadi/php-base:8.5-alpine-amd64 \
+            ghcr.io/juniyadi/php-base:8.5-alpine-arm64 \
+            -t ghcr.io/juniyadi/php-base:latest \
+            -t ghcr.io/juniyadi/php-base:alpine
+
+          echo "Manifest lists created successfully!"
+
+      - name: Verify manifests
+        run: |
+          echo "Verifying multi-arch images..."
+          for TAG in 8.5-alpine 8.5-debian 8.4-alpine 8.3-alpine 8.2-alpine latest alpine; do
+            MANIFEST=$(docker manifest inspect ghcr.io/juniyadi/php-base:${TAG} 2>/dev/null)
+            if [ -n "$MANIFEST" ]; then
+              AMD64=$(echo "$MANIFEST" | grep -c '"architecture": "amd64"' || echo "0")
+              ARM64=$(echo "$MANIFEST" | grep -c '"architecture": "arm64"' || echo "0")
+              echo "✓ ${TAG}: ${AMD64} AMD64 + ${ARM64} ARM64"
+            else
+              echo "✗ ${TAG}: Not found"
+            fi
+          done
 
   # -----------------------------------------------
   # Job: Security Scan (Latest Alpine)
@@ -208,7 +290,7 @@ jobs:
   security:
     name: Security Scan (8.5-alpine)
     runs-on: ubuntu-latest
-    needs: build
+    needs: create-manifests
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       security-events: write
@@ -229,9 +311,10 @@ jobs:
 
       - name: Pull and scan image
         run: |
-          # Use lowercase for repository name
+          # Use lowercase for repository name - pull multi-arch manifest (auto-selects arch)
           IMAGE_LOWER=$(echo "${{ env.REGISTRY }}/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           docker pull "${IMAGE_LOWER}:8.5-alpine"
+          # Note: No -amd64 suffix needed - manifest list pulls correct arch automatically
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
