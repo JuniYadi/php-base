@@ -44,8 +44,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  # Force lowercase for image names (GitHub Packages is case-insensitive but paths must match)
-  IMAGE_NAME: ${{ github.repository.toLowerCase() }}
+  # Use lowercase for image names (GitHub Packages requires consistent casing)
+  IMAGE_NAME: juniyadi/php-base
 
 jobs:
   # -----------------------------------------------
