@@ -162,19 +162,46 @@ CMD ["sh", "-c", "php artisan config:cache && php-fpm -D && nginx -g 'daemon off
 - `redis`, `memcached`, `imagick`, `soap`
 - `ssh2`, `xsl`, `xmlrpc`, `yaml`, `apcu`
 
-## Available Tags
+## Multi-Architecture Support
 
-| Tag | Description |
-|-----|-------------|
-| `8.5`, `latest` | PHP 8.5 (latest stable) |
-| `8.4` | PHP 8.4 |
-| `8.3` | PHP 8.3 |
-| `8.2` | PHP 8.2 |
-| `8.1` | PHP 8.1 |
-| `8.0` | PHP 8.0 (EOL) |
-| `7.4` | PHP 7.4 (EOL) |
-| `8.5-amd64` | PHP 8.5 (AMD64 only) |
-| `8.5-arm64` | PHP 8.5 (ARM64 only) |
+All images are **multi-arch** (AMD64 + ARM64) - Docker automatically pulls the correct architecture for your machine.
+
+```bash
+# Works on both AMD64 and ARM64 machines
+docker pull ghcr.io/juniyadi/php-base:8.5
+```
+
+### Available Tags
+
+#### Multi-Arch Tags (Recommended)
+These tags work on ALL machines - Docker selects the correct architecture automatically.
+
+| Tag | Base | Description |
+|-----|------|-------------|
+| `8.5`, `latest` | Debian | PHP 8.5 (default, glibc compatible) |
+| `8.5-alpine` | Alpine | PHP 8.5 (minimal, musl) |
+| `8.4` | Alpine | PHP 8.4 |
+| `8.3` | Alpine | PHP 8.3 |
+| `8.2` | Alpine | PHP 8.2 |
+
+#### Explicit Architecture Tags
+Pull specific architecture when needed.
+
+| Tag | Base | Arch | Description |
+|-----|------|------|-------------|
+| `8.5-amd64` | Debian | AMD64 | PHP 8.5 AMD64 only |
+| `8.5-arm64` | Debian | ARM64 | PHP 8.5 ARM64 only |
+| `8.5-alpine-amd64` | Alpine | AMD64 | PHP 8.5 Alpine AMD64 |
+| `8.5-alpine-arm64` | Alpine | ARM64 | PHP 8.5 Alpine ARM64 |
+
+### Tag Priorities
+
+| Pull Command | What You Get |
+|--------------|--------------|
+| `php-base:8.5` | 8.5 Debian multi-arch |
+| `php-base:8.5-alpine` | 8.5 Alpine multi-arch |
+| `php-base:8.5-amd64` | 8.5 Debian AMD64 only |
+| `php-base:latest` | 8.5 Debian multi-arch |
 
 ## Building Locally
 

@@ -102,12 +102,15 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # Architecture-specific tag (will be combined into multi-arch manifest)
+            # Version-only tag (multi-arch, defaults to debian for 8.5)
+            type=raw,value=${{ matrix.php_version }}
+            # Version-base tag (multi-arch, e.g., 8.5-debian, 8.5-alpine)
+            type=raw,value=${{ matrix.php_version }}-${{ matrix.base_image }}
+            # Architecture-specific tags (explicit arch for specific pulls)
             type=raw,value=${{ matrix.php_version }}-${{ matrix.base_image }}-${{ matrix.arch }}
             type=sha,prefix=${{ matrix.php_version }}-${{ matrix.base_image }}-${{ matrix.arch }}-,format=long
-            # Latest/alpine tags only from PHP 8.5 Alpine (both archs will point to these)
-            ${{ matrix.is_latest == true && matrix.base_image == 'alpine' && 'type=raw,value=latest' || '' }}
-            ${{ matrix.is_latest == true && matrix.base_image == 'alpine' && 'type=raw,value=alpine' || '' }}
+            # Latest tag from 8.5-debian (both archs)
+            ${{ matrix.php_version == '8.5' && matrix.base_image == 'debian' && 'type=raw,value=latest' || '' }}
           labels: |
             org.opencontainers.image.title=PHP ${{ matrix.php_version }} (${{ matrix.base_image }}-${{ matrix.arch }})
             org.opencontainers.image.description=Multi-version PHP runtime with ${{ matrix.base_image }} base
@@ -249,14 +252,12 @@ jobs:
         run: |
           echo "Creating multi-arch manifest lists..."
 
-          # Define all version/base combinations
-          VERSIONS=("8.2" "8.3" "8.4" "8.5")
-          BASES=("alpine" "debian")
           REGISTRY="${{ env.REGISTRY }}"
           IMAGE_NAME="${{ env.IMAGE_NAME }}"
 
-          for VERSION in "${VERSIONS[@]}"; do
-            for BASE in "${BASES[@]}"; do
+          # Create manifest lists for each version/base combination
+          for VERSION in 8.2 8.3 8.4 8.5; do
+            for BASE in alpine debian; do
               # Skip Debian for older versions (8.2, 8.3)
               if [[ "$VERSION" == "8.2" || "$VERSION" == "8.3" ]] && [[ "$BASE" == "debian" ]]; then
                 continue
@@ -264,7 +265,7 @@ jobs:
 
               echo "Creating manifest for: ${VERSION}-${BASE}"
 
-              # Create manifest list combining both architectures
+              # Create multi-arch manifest (combines AMD64 + ARM64)
               docker buildx imagetools create \
                 ${REGISTRY}/${IMAGE_NAME}:${VERSION}-${BASE}-amd64 \
                 ${REGISTRY}/${IMAGE_NAME}:${VERSION}-${BASE}-arm64 \
@@ -272,13 +273,19 @@ jobs:
             done
           done
 
-          # Create latest and alpine tags from 8.5-alpine
-          echo "Creating latest/alpine tags..."
+          # Create version-only tag (defaults to 8.5-debian multi-arch)
+          echo "Creating version-only tags..."
           docker buildx imagetools create \
-            ${REGISTRY}/${IMAGE_NAME}:8.5-alpine-amd64 \
-            ${REGISTRY}/${IMAGE_NAME}:8.5-alpine-arm64 \
-            -t ${REGISTRY}/${IMAGE_NAME}:latest \
-            -t ${REGISTRY}/${IMAGE_NAME}:alpine
+            ${REGISTRY}/${IMAGE_NAME}:8.5-debian-amd64 \
+            ${REGISTRY}/${IMAGE_NAME}:8.5-debian-arm64 \
+            -t ${REGISTRY}/${IMAGE_NAME}:8.5
+
+          # Create latest tag from 8.5-debian (glibc compatibility)
+          echo "Creating latest tag..."
+          docker buildx imagetools create \
+            ${REGISTRY}/${IMAGE_NAME}:8.5-debian-amd64 \
+            ${REGISTRY}/${IMAGE_NAME}:8.5-debian-arm64 \
+            -t ${REGISTRY}/${IMAGE_NAME}:latest
 
           echo "Manifest lists created successfully!"
 
@@ -287,7 +294,7 @@ jobs:
           REGISTRY="${{ env.REGISTRY }}"
           IMAGE_NAME="${{ env.IMAGE_NAME }}"
           echo "Verifying multi-arch images..."
-          for TAG in 8.5-alpine 8.5-debian 8.4-alpine 8.3-alpine 8.2-alpine latest alpine; do
+          for TAG in 8.5 8.5-alpine 8.5-debian 8.4-alpine 8.3-alpine 8.2-alpine latest; do
             MANIFEST=$(docker manifest inspect ${REGISTRY}/${IMAGE_NAME}:${TAG} 2>/dev/null)
             if [ -n "$MANIFEST" ]; then
               AMD64=$(echo "$MANIFEST" | grep -c '"architecture": "amd64"' || echo "0")
