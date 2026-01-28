@@ -2,14 +2,28 @@
 # Multi-Version PHP Base Image
 # ===============================================
 # Supports: PHP 7.4, 8.0, 8.1, 8.2, 8.3, 8.4, 8.5
-# Build with:
+#
+# Build Examples:
 #   - Alpine:  docker build --build-arg BASE_IMAGE=alpine -t php:8.5-alpine .
 #   - Debian:  docker build --build-arg BASE_IMAGE=debian -t php:8.5-debian .
+#
+# Optional Extensions (set to 0 to disable):
+#   - --build-arg INSTALL_REDIS=0  (default: 1)
+#   - --build-arg INSTALL_APCU=0   (default: 1)
+#   - --build-arg INSTALL_YAML=0   (default: 1)
+#
+# Example - Disable Redis and YAML:
+#   docker build --build-arg INSTALL_REDIS=0 --build-arg INSTALL_YAML=0 -t php:minimal .
 # ===============================================
 
 # Build arguments
 ARG PHP_VERSION=8.5
 ARG BASE_IMAGE=alpine  # Options: alpine, debian
+
+# Optional PECL extensions (set to 0 to disable)
+ARG INSTALL_REDIS=1
+ARG INSTALL_APCU=1
+ARG INSTALL_YAML=1
 
 # ===============================================
 # Stage 1: Base PHP Runtime
@@ -23,17 +37,25 @@ FROM php:${PHP_VERSION}-fpm-bookworm AS php-base-debian
 # Common base stage selector
 FROM php-base-${BASE_IMAGE} AS php-base
 
+# Propagate ARGs to ENV for use in this stage
+ARG INSTALL_REDIS
+ARG INSTALL_APCU
+ARG INSTALL_YAML
+ENV PHP_EXTENSIONS_REDIS=${INSTALL_REDIS}
+ENV PHP_EXTENSIONS_APCU=${INSTALL_APCU}
+ENV PHP_EXTENSIONS_YAML=${INSTALL_YAML}
+
 # Install build dependencies based on base OS
 ARG BASE_IMAGE
 RUN if [ "${BASE_IMAGE}" = "debian" ]; then \
         apt-get update && apt-get install -y --no-install-recommends \
             libcurl4-openssl-dev libzip-dev libpng-dev libjpeg-dev libfreetype6-dev \
-            libicu-dev libsqlite3-dev libpq-dev libonig-dev libxml2-dev && \
+            libicu-dev libsqlite3-dev libpq-dev libonig-dev libxml2-dev libyaml-dev && \
         rm -rf /var/lib/apt/lists/* /tmp/*; \
     else \
         apk add --no-cache \
             curl-dev libzip-dev libpng-dev libjpeg-turbo-dev freetype-dev \
-            icu-dev sqlite-dev postgresql-dev oniguruma-dev linux-headers libxml2-dev && \
+            icu-dev sqlite-dev postgresql-dev oniguruma-dev linux-headers libxml2-dev yaml-dev && \
         rm -rf /var/cache/apk/* /tmp/*; \
     fi
 
@@ -63,6 +85,39 @@ RUN docker-php-ext-install -j$(nproc) \
 RUN docker-php-ext-install sockets
 RUN docker-php-ext-install xml
 RUN docker-php-ext-install xmlwriter
+
+# Install build dependencies for PECL extensions
+RUN if [ "${BASE_IMAGE}" = "debian" ]; then \
+        apt-get update && apt-get install -y --no-install-recommends \
+            autoconf gcc g++ make pkg-config && \
+        rm -rf /var/lib/apt/lists/*; \
+    else \
+        apk add --no-cache \
+            autoconf gcc g++ make pkgconfig libc-dev; \
+        rm -rf /var/cache/apk/*; \
+    fi
+
+# Install PECL extensions (Redis, APCu, YAML) - conditionally enabled
+# Usage: --build-arg INSTALL_REDIS=0 to disable Redis, etc.
+RUN set -e; \
+    extensions=""; \
+    if [ "${INSTALL_REDIS}" = "1" ]; then extensions="${extensions} redis"; fi; \
+    if [ "${INSTALL_APCU}" = "1" ]; then extensions="${extensions} apcu"; fi; \
+    if [ "${INSTALL_YAML}" = "1" ]; then extensions="${extensions} yaml"; fi; \
+    if [ -n "${extensions}" ]; then \
+        pecl install ${extensions} && \
+        docker-php-ext-enable ${extensions}; \
+    fi
+
+# Remove build dependencies to reduce image size
+RUN if [ "${BASE_IMAGE}" = "debian" ]; then \
+        apt-get remove -y --purge autoconf gcc g++ make pkg-config && \
+        apt-get autoremove -y && \
+        rm -rf /var/lib/apt/lists/*; \
+    else \
+        apk del autoconf gcc g++ make pkgconfig libc-dev; \
+        rm -rf /var/cache/apk/*; \
+    fi
 
 # Enable opcache (built into PHP 8.5 base image - use directives, not zend_extension)
 RUN echo "opcache.enable=1" > /usr/local/etc/php/conf.d/opcache.ini
@@ -157,4 +212,7 @@ LABEL org.opencontainers.image.title="PHP ${PHP_VERSION}" \
       org.opencontainers.image.version="${PHP_VERSION}" \
       maintainer="juniyadi" \
       php.version="${PHP_VERSION}" \
-      base.image="${BASE_IMAGE}"
+      base.image="${BASE_IMAGE}" \
+      php.extensions.redis="${PHP_EXTENSIONS_REDIS}" \
+      php.extensions.apcu="${PHP_EXTENSIONS_APCU}" \
+      php.extensions.yaml="${PHP_EXTENSIONS_YAML}"
