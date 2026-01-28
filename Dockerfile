@@ -65,8 +65,8 @@ RUN docker-php-ext-configure gd \
         --with-jpeg
 
 # Install core extensions (includes curl for Laravel HTTP client)
+# Note: pdo, mbstring, xml are already available in PHP base images
 RUN docker-php-ext-install -j$(nproc) \
-        pdo \
         pdo_mysql \
         pdo_pgsql \
         pdo_sqlite \
@@ -74,17 +74,14 @@ RUN docker-php-ext-install -j$(nproc) \
         curl
 
 RUN docker-php-ext-install -j$(nproc) \
-        mbstring \
         gd \
         intl \
         zip \
         bcmath
 
-# Install core extensions individually to isolate build issues
+# Install remaining extensions
 # Note: json, fileinfo, tokenizer are built into PHP 8.x core
 RUN docker-php-ext-install sockets
-RUN docker-php-ext-install xml
-RUN docker-php-ext-install xmlwriter
 
 # Install build dependencies for PECL extensions
 RUN if [ "${BASE_IMAGE}" = "debian" ]; then \
