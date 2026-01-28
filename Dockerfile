@@ -147,6 +147,7 @@ RUN if [ "${BASE_IMAGE}" = "debian" ]; then \
 # Create directories
 RUN mkdir -p /var/www/html \
              /var/log/supervisor \
+             /etc/nginx/conf.d \
              /etc/nginx/http.d \
              /etc/supervisor.d \
              /var/log/php \
@@ -154,6 +155,7 @@ RUN mkdir -p /var/www/html \
 
 # Copy nginx configuration
 COPY docker/nginx/nginx.conf /etc/nginx/nginx.conf
+COPY docker/nginx/logging.conf /etc/nginx/conf.d/logging.conf
 COPY docker/nginx/default.conf /etc/nginx/http.d/default.conf
 
 # Copy startup scripts
