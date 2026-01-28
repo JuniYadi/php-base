@@ -153,6 +153,7 @@ RUN mkdir -p /var/www/html \
              /var/run/php-fpm
 
 # Copy nginx configuration
+COPY docker/nginx/nginx.conf /etc/nginx/nginx.conf
 COPY docker/nginx/default.conf /etc/nginx/http.d/default.conf
 
 # Copy startup scripts
