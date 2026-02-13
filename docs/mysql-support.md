@@ -38,9 +38,8 @@ echo "Connected successfully";
 
 ## Installation Details
 
-These extensions are installed during the Docker image build process:
+These extensions are installed during the Docker image build process in the Dockerfile:
 
-**Dockerfile (lines 69-74):**
 ```dockerfile
 RUN docker-php-ext-install -j$(nproc) \
         pdo_mysql \

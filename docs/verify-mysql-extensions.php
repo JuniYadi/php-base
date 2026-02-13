@@ -52,18 +52,6 @@ if (extension_loaded('pdo_mysql')) {
         $allPassed = false;
     }
     
-    // Try to get client version from PDO
-    try {
-        // Create a dummy connection to get attributes
-        // This will fail but we can still get the client version
-        $options = [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_EMULATE_PREPARES => false,
-        ];
-    } catch (PDOException $e) {
-        // Expected to fail without actual database
-    }
-    
     echo "   ✓ PDO MySQL support confirmed\n";
 } else {
     echo "   ✗ Status: NOT LOADED\n";
