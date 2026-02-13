@@ -1,4 +1,4 @@
-#!/usr/bin/env php
+#!/usr/bin/php
 <?php
 /**
  * MySQL/MariaDB Extension Verification Script
@@ -117,7 +117,7 @@ if (extension_loaded('mysqli')) {
             echo "   ✗ mysqli constants not found\n";
             $allPassed = false;
         }
-    } catch (Exception $e) {
+    } catch (Error $e) {
         echo "   ✗ Error testing mysqli: " . $e->getMessage() . "\n";
         $allPassed = false;
     }
@@ -150,7 +150,10 @@ if (extension_loaded('pdo_mysql')) {
             echo "   Available drivers: " . implode(', ', $drivers) . "\n";
             $allPassed = false;
         }
-    } catch (Exception $e) {
+    } catch (PDOException $e) {
+        echo "   ✗ PDO Error: " . $e->getMessage() . "\n";
+        $allPassed = false;
+    } catch (Error $e) {
         echo "   ✗ Error testing PDO: " . $e->getMessage() . "\n";
         $allPassed = false;
     }
