@@ -2,6 +2,18 @@
 
 Multi-version PHP base image with Nginx, PHP-FPM, and configurable extensions. Published to GitHub Container Registry.
 
+## ✅ MySQL/MariaDB Support
+
+**YES**, MySQL and MariaDB extensions (`mysqli` and `pdo_mysql`) are **enabled by default** in all images. No configuration required!
+
+```php
+// Works out of the box
+$pdo = new PDO('mysql:host=db;dbname=myapp', 'user', 'pass');
+$mysqli = new mysqli('db', 'user', 'pass', 'myapp');
+```
+
+👉 See [MySQL Support Documentation](docs/mysql-support.md) for full details and verification.
+
 ## Supported Versions
 
 | PHP Version | Status | AMD64 | ARM64 |
@@ -163,6 +175,8 @@ CMD ["sh", "-c", "php artisan config:cache && php-fpm -D && nginx -g 'daemon off
 - `mysqli`, `mbstring`, `gd`, `intl`, `zip`
 - `bcmath`, `sockets`, `json`, `xml`, `tokenizer`
 - `xmlwriter`, `fileinfo`, `opcache`
+
+> **📌 MySQL/MariaDB Support**: Both `mysqli` and `pdo_mysql` are **enabled by default** in all images. No configuration needed! See [MySQL Support Documentation](docs/mysql-support.md) for details.
 
 ### Optional Extensions (Enable via ENV)
 - `redis`, `memcached`, `imagick`, `soap`

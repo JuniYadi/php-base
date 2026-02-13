@@ -89,6 +89,14 @@ test: build
 	@docker run --rm $(FULL_IMAGE):$(PHP_VERSION) php -m | head -20
 
 # -----------------------------------------------
+# Test MySQL/MariaDB extensions
+# -----------------------------------------------
+test-mysql: build
+	@echo "Testing MySQL/MariaDB extensions in PHP $(PHP_VERSION)..."
+	@docker run --rm -v $(PWD)/docs/verify-mysql-extensions.php:/verify.php \
+		$(FULL_IMAGE):$(PHP_VERSION) php /verify.php
+
+# -----------------------------------------------
 # Shell into the image
 # -----------------------------------------------
 shell: build
@@ -131,6 +139,7 @@ help:
 	@echo "  push-all           - Push all built versions"
 	@echo "  build-multiplatform - Build AMD64 + ARM64 and push"
 	@echo "  test               - Test built image"
+	@echo "  test-mysql         - Test MySQL/MariaDB extensions"
 	@echo "  shell              - Open shell in image"
 	@echo "  clean              - Remove local images"
 	@echo "  prune              - Prune build cache"
