@@ -149,6 +149,8 @@ RUN mkdir -p /var/www/html \
              /var/log/supervisor \
              /etc/nginx/conf.d \
              /etc/nginx/http.d \
+             /etc/nginx/snippets \
+             /etc/supervisor \
              /etc/supervisor.d \
              /var/log/php \
              /var/run/php-fpm
@@ -156,7 +158,10 @@ RUN mkdir -p /var/www/html \
 # Copy nginx configuration
 COPY docker/nginx/nginx.conf /etc/nginx/nginx.conf
 COPY docker/nginx/logging.conf /etc/nginx/conf.d/logging.conf
+COPY docker/nginx/proxy-trust-cloudflare.conf /etc/nginx/conf.d/proxy-trust-cloudflare.conf
 COPY docker/nginx/default.conf /etc/nginx/http.d/default.conf
+COPY docker/nginx/snippets/ /etc/nginx/snippets/
+COPY docker/supervisor/supervisord.conf /etc/supervisor/supervisord.conf
 
 # Copy startup scripts
 COPY docker/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
@@ -193,7 +198,8 @@ ENV PHP_MEMORY_LIMIT=128M \
 # Nginx Configuration
 ENV NGINX_WORKER_PROCESSES=auto \
     NGINX_WORKER_CONNECTIONS=1024 \
-    NGINX_CLIENT_BODY_BUFFER=16k
+    NGINX_CLIENT_BODY_BUFFER=16k \
+    NGINX_TRUST_CLOUDFLARE=0
 
 # Default ports
 EXPOSE 80 443
