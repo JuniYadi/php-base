@@ -267,6 +267,7 @@ configure_nginx() {
     echo "Configuring Nginx..."
 
     local nginx_conf="/etc/nginx/nginx.conf"
+    local cloudflare_conf="/etc/nginx/conf.d/proxy-trust-cloudflare.conf"
 
     if [ -n "$NGINX_WORKER_PROCESSES" ]; then
         sed -i "s/worker_processes.*auto;/worker_processes ${NGINX_WORKER_PROCESSES};/" "$nginx_conf"
@@ -278,6 +279,19 @@ configure_nginx() {
 
     if [ -n "$NGINX_CLIENT_BODY_BUFFER" ]; then
         sed -i "s/client_body_buffer_size.*128k;/client_body_buffer_size ${NGINX_CLIENT_BODY_BUFFER};/" "$nginx_conf"
+    fi
+
+    if [ "${NGINX_TRUST_CLOUDFLARE:-0}" = "1" ]; then
+        cat > "$cloudflare_conf" << 'EOF'
+include /etc/nginx/snippets/proxy-trust-cloudflare.conf;
+EOF
+        echo "Cloudflare trusted proxies: enabled"
+    else
+        cat > "$cloudflare_conf" << 'EOF'
+# Cloudflare trusted proxy list is disabled by default.
+# Set NGINX_TRUST_CLOUDFLARE=1 to enable at runtime.
+EOF
+        echo "Cloudflare trusted proxies: disabled"
     fi
 
     # Create required directories
