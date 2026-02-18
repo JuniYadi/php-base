@@ -14,8 +14,11 @@ set -e
 # Configuration
 PHP_FPM_BIN="${PHP_FPM_BIN:-php-fpm}"
 NGINX_BIN="${NGINX_BIN:-nginx}"
+SUPERVISORD_BIN="${SUPERVISORD_BIN:-supervisord}"
+SUPERVISORD_CONF="${SUPERVISORD_CONF:-/etc/supervisor/supervisord.conf}"
 PHP_FPM_PID="/var/run/php-fpm.pid"
 NGINX_PID="/var/run/nginx.pid"
+SUPERVISORD_PID="/var/run/supervisord.pid"
 CHECK_INTERVAL="${HEALTH_CHECK_INTERVAL:-5}"
 MAX_RESTARTS="${MAX_RESTARTS:-3}"
 RESTART_DELAY="${RESTART_DELAY:-2}"
@@ -90,12 +93,33 @@ shutdown_handler() {
         fi
     fi
 
+    # Shutdown supervisord-managed optional processes (if enabled)
+    if [ -f "$SUPERVISORD_PID" ]; then
+        log_info "Stopping supervisord (PID: $(cat $SUPERVISORD_PID))..."
+        kill -${sig} "$(cat $SUPERVISORD_PID)" 2>/dev/null || true
+
+        local waited=0
+        while [ -f "$SUPERVISORD_PID" ] && [ $waited -lt $timeout ]; do
+            sleep 1
+            waited=$((waited + 1))
+        done
+
+        if [ -f "$SUPERVISORD_PID" ]; then
+            log_warn "supervisord did not exit gracefully, forcing..."
+            kill -9 "$(cat $SUPERVISORD_PID)" 2>/dev/null || true
+        fi
+    fi
+
     log_info "Shutdown complete"
     exit 0
 }
 
 trap 'shutdown_handler TERM' TERM
 trap 'shutdown_handler INT' INT
+
+has_supervisor_configs() {
+    ls /etc/supervisor.d/*.conf >/dev/null 2>&1
+}
 
 # ===============================================
 # Health Check Functions
@@ -195,6 +219,22 @@ main() {
 
     # Create required directories
     mkdir -p /var/run /var/log/php-fpm /var/log/nginx
+
+    # Start optional supervisord for user-provided extra services.
+    # Enable with ENABLE_SUPERVISORD=1, disable with ENABLE_SUPERVISORD=0.
+    if [ "${ENABLE_SUPERVISORD:-auto}" != "0" ] && has_supervisor_configs; then
+        log_info "Starting supervisord for /etc/supervisor.d/*.conf ..."
+        $SUPERVISORD_BIN -c "$SUPERVISORD_CONF"
+        sleep 1
+        if [ -f "$SUPERVISORD_PID" ]; then
+            log_info "supervisord started (PID: $(cat $SUPERVISORD_PID))"
+        else
+            log_error "Failed to start supervisord with config: $SUPERVISORD_CONF"
+            exit 1
+        fi
+    else
+        log_info "No extra supervisord configs detected (or disabled)"
+    fi
 
     # Start PHP-FPM
     log_info "Starting PHP-FPM..."

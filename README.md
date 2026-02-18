@@ -99,6 +99,23 @@ ENV PHP_EXT_REDIS=1 \
 | `NGINX_WORKER_PROCESSES` | auto | Number of worker processes |
 | `NGINX_WORKER_CONNECTIONS` | 1024 | Connections per worker |
 | `NGINX_CLIENT_BODY_BUFFER` | 16k | Client body buffer size |
+| `NGINX_TRUST_CLOUDFLARE` | 0 | Trust Cloudflare proxy IP ranges for real client IP extraction |
+
+Default access logs are emitted as JSON to stdout, and security-block logs are emitted as JSON to stderr.
+
+Dynamic routes can be overridden by mounting a custom file at:
+- `/etc/nginx/snippets/dynamic-routes.conf`
+
+Main app routing (`location /`) can be fully replaced by mounting:
+- `/etc/nginx/snippets/main-location.conf`
+
+Extra supervised processes can be added by mounting one or more files at:
+- `/etc/supervisor.d/*.conf`
+
+Control optional supervisord startup:
+- `ENABLE_SUPERVISORD=auto` (default: start only if `/etc/supervisor.d/*.conf` exists)
+- `ENABLE_SUPERVISORD=0` (disable)
+- `ENABLE_SUPERVISORD=1` (force enable when configs are present)
 
 ## Docker Compose Example
 
