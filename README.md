@@ -138,6 +138,17 @@ CMD ["sh", "-lc", "exec /usr/local/bin/start.sh"]
 - Laravel: `example/laravel/README.md`
 - WordPress: `example/wordpress/README.md`
 
+### Startup Regression Testing
+
+Run startup regression tests locally against a built image:
+
+```bash
+docker build --build-arg PHP_VERSION=8.5 --build-arg BASE_IMAGE=alpine -t php-base:test-8.5-alpine .
+./tests/startup-regression.sh php-base:test-8.5-alpine
+```
+
+CI also runs this suite for `8.5-alpine` and `8.5-debian` on pull requests.
+
 ## Docker Compose Example
 
 ```yaml

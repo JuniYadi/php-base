@@ -92,7 +92,9 @@ check_security_overrides() {
         echo "✓ Default: Dangerous command execution functions are disabled"
     fi
 
-    [ $has_override -eq 1 ] && echo ""
+    if [ "$has_override" -eq 1 ]; then
+        echo ""
+    fi
 }
 
 check_security_overrides
@@ -274,20 +276,26 @@ configure_nginx() {
     local nginx_index_files="${NGINX_INDEX_FILES:-index.php index.html}"
     local nginx_front_controller="${NGINX_FRONT_CONTROLLER:-/index.php?\$query_string}"
 
-    if printf '%s' "$nginx_docroot" | grep -q '[;\r\n]'; then
-        echo "ERROR: NGINX_DOCROOT contains invalid characters"
-        exit 1
-    fi
+    case "$nginx_docroot" in
+        *';'*|*$'\r'*|*$'\n'*)
+            echo "ERROR: NGINX_DOCROOT contains invalid characters"
+            exit 1
+            ;;
+    esac
 
-    if printf '%s' "$nginx_index_files" | grep -q '[;\r\n]'; then
-        echo "ERROR: NGINX_INDEX_FILES contains invalid characters"
-        exit 1
-    fi
+    case "$nginx_index_files" in
+        *';'*|*$'\r'*|*$'\n'*)
+            echo "ERROR: NGINX_INDEX_FILES contains invalid characters"
+            exit 1
+            ;;
+    esac
 
-    if printf '%s' "$nginx_front_controller" | grep -q '[;\r\n]'; then
-        echo "ERROR: NGINX_FRONT_CONTROLLER contains invalid characters"
-        exit 1
-    fi
+    case "$nginx_front_controller" in
+        *';'*|*$'\r'*|*$'\n'*)
+            echo "ERROR: NGINX_FRONT_CONTROLLER contains invalid characters"
+            exit 1
+            ;;
+    esac
 
     if [ -n "$NGINX_WORKER_PROCESSES" ]; then
         sed -i "s/worker_processes.*auto;/worker_processes ${NGINX_WORKER_PROCESSES};/" "$nginx_conf"
