@@ -100,6 +100,9 @@ ENV PHP_EXT_REDIS=1 \
 | `NGINX_WORKER_CONNECTIONS` | 1024 | Connections per worker |
 | `NGINX_CLIENT_BODY_BUFFER` | 16k | Client body buffer size |
 | `NGINX_TRUST_CLOUDFLARE` | 0 | Trust Cloudflare proxy IP ranges for real client IP extraction |
+| `NGINX_DOCROOT` | `/var/www/html` | Nginx document root path |
+| `NGINX_INDEX_FILES` | `index.php index.html` | Nginx index directives |
+| `NGINX_FRONT_CONTROLLER` | `/index.php?$query_string` | Front controller fallback for `try_files` |
 
 Default access logs are emitted as JSON to stdout, and security-block logs are emitted as JSON to stderr.
 
@@ -116,6 +119,24 @@ Control optional supervisord startup:
 - `ENABLE_SUPERVISORD=auto` (default: start only if `/etc/supervisor.d/*.conf` exists)
 - `ENABLE_SUPERVISORD=0` (disable)
 - `ENABLE_SUPERVISORD=1` (force enable when configs are present)
+
+### Startup Contract
+
+- Keep base `ENTRYPOINT` (`/usr/local/bin/docker-entrypoint.sh`) unchanged.
+- Use `CMD` for app startup behavior and always hand off to `/usr/local/bin/start.sh`.
+- Optional bootstrap tasks can be executed with `APP_BOOTSTRAP_CMD`.
+
+Example:
+
+```dockerfile
+ENV APP_BOOTSTRAP_CMD="php artisan config:cache || true"
+CMD ["sh", "-lc", "exec /usr/local/bin/start.sh"]
+```
+
+### Framework Integration Guides
+
+- Laravel: `example/laravel/README.md`
+- WordPress: `example/wordpress/README.md`
 
 ## Docker Compose Example
 
@@ -163,14 +184,28 @@ COPY . .
 # Configure Laravel
 ENV APP_ENV=production \
     APP_DEBUG=false \
-    PHP_MAX_CHILDREN=10
-
-# Build assets (if using Vite/Mix)
-RUN npm ci && npm run build
+    PHP_MAX_CHILDREN=10 \
+    NGINX_DOCROOT=/var/www/html/public \
+    APP_BOOTSTRAP_CMD="php artisan migrate --force && php artisan config:cache || true"
 
 EXPOSE 80
 
-CMD ["sh", "-c", "php artisan config:cache && php-fpm -D && nginx -g 'daemon off;'"]
+CMD ["sh", "-lc", "exec /usr/local/bin/start.sh"]
+```
+
+## WordPress Example
+
+```dockerfile
+FROM ghcr.io/juniyadi/php-base:8.4
+
+WORKDIR /var/www/html
+COPY . /var/www/html
+
+# WordPress works with base defaults. Optional explicit fallback:
+ENV NGINX_INDEX_FILES="index.php index.html" \
+    NGINX_FRONT_CONTROLLER="/index.php?$args"
+
+CMD ["sh", "-lc", "exec /usr/local/bin/start.sh"]
 ```
 
 ## Installed Extensions

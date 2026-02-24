@@ -268,6 +268,26 @@ configure_nginx() {
 
     local nginx_conf="/etc/nginx/nginx.conf"
     local cloudflare_conf="/etc/nginx/conf.d/proxy-trust-cloudflare.conf"
+    local runtime_server_conf="/etc/nginx/snippets/runtime-server.conf"
+    local main_location_conf="/etc/nginx/snippets/main-location.conf"
+    local nginx_docroot="${NGINX_DOCROOT:-/var/www/html}"
+    local nginx_index_files="${NGINX_INDEX_FILES:-index.php index.html}"
+    local nginx_front_controller="${NGINX_FRONT_CONTROLLER:-/index.php?\$query_string}"
+
+    if printf '%s' "$nginx_docroot" | grep -q '[;\r\n]'; then
+        echo "ERROR: NGINX_DOCROOT contains invalid characters"
+        exit 1
+    fi
+
+    if printf '%s' "$nginx_index_files" | grep -q '[;\r\n]'; then
+        echo "ERROR: NGINX_INDEX_FILES contains invalid characters"
+        exit 1
+    fi
+
+    if printf '%s' "$nginx_front_controller" | grep -q '[;\r\n]'; then
+        echo "ERROR: NGINX_FRONT_CONTROLLER contains invalid characters"
+        exit 1
+    fi
 
     if [ -n "$NGINX_WORKER_PROCESSES" ]; then
         sed -i "s/worker_processes.*auto;/worker_processes ${NGINX_WORKER_PROCESSES};/" "$nginx_conf"
@@ -293,6 +313,21 @@ EOF
 EOF
         echo "Cloudflare trusted proxies: disabled"
     fi
+
+    cat > "$runtime_server_conf" << EOF
+# Generated at container startup. Override via env vars:
+# - NGINX_DOCROOT
+# - NGINX_INDEX_FILES
+root ${nginx_docroot};
+index ${nginx_index_files};
+EOF
+
+    cat > "$main_location_conf" << EOF
+# Generated at container startup. Override via NGINX_FRONT_CONTROLLER.
+location / {
+    try_files \$uri \$uri/ ${nginx_front_controller};
+}
+EOF
 
     # Create required directories
     mkdir -p /var/log/nginx /var/run/nginx
@@ -323,6 +358,14 @@ ensure_directories() {
     chown -R www-data:www-data /var/www/html 2>/dev/null || true
 }
 
+run_app_bootstrap() {
+    if [ -n "${APP_BOOTSTRAP_CMD:-}" ]; then
+        echo "Running APP_BOOTSTRAP_CMD..."
+        sh -lc "$APP_BOOTSTRAP_CMD"
+        echo "APP_BOOTSTRAP_CMD completed"
+    fi
+}
+
 # ===============================================
 # Run configurations
 # ===============================================
@@ -333,6 +376,7 @@ configure_php_ini
 configure_php_fpm
 configure_nginx
 ensure_directories
+run_app_bootstrap
 
 echo "Configuration complete!"
 echo "================================"

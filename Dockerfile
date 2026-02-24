@@ -199,7 +199,13 @@ ENV PHP_MEMORY_LIMIT=128M \
 ENV NGINX_WORKER_PROCESSES=auto \
     NGINX_WORKER_CONNECTIONS=1024 \
     NGINX_CLIENT_BODY_BUFFER=16k \
-    NGINX_TRUST_CLOUDFLARE=0
+    NGINX_TRUST_CLOUDFLARE=0 \
+    NGINX_DOCROOT=/var/www/html \
+    NGINX_INDEX_FILES="index.php index.html" \
+    NGINX_FRONT_CONTROLLER="/index.php?\$query_string"
+
+# Optional pre-start app bootstrap command.
+ENV APP_BOOTSTRAP_CMD=""
 
 # Default ports
 EXPOSE 80 443
