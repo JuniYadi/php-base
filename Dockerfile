@@ -162,6 +162,8 @@ COPY docker/nginx/proxy-trust-cloudflare.conf /etc/nginx/conf.d/proxy-trust-clou
 COPY docker/nginx/default.conf /etc/nginx/http.d/default.conf
 COPY docker/nginx/snippets/ /etc/nginx/snippets/
 COPY docker/supervisor/supervisord.conf /etc/supervisor/supervisord.conf
+COPY docker/supervisor/php-fpm.conf /etc/supervisor.d/php-fpm.conf
+COPY docker/supervisor/nginx.conf /etc/supervisor.d/nginx.conf
 
 # Copy startup scripts
 COPY docker/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
