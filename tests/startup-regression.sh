@@ -103,7 +103,12 @@ run_expect_failure "invalid front controller newline" "ERROR: NGINX_FRONT_CONTRO
     -e "NGINX_FRONT_CONTROLLER=${bad_front}" \
     "$IMAGE_TAG" sh -lc 'echo should-not-run'
 
-# 6) Runtime startup should not contain PHP-FPM parse failures.
+# 6) Image config should prioritize dynamic routes before static assets.
+run_expect_success "nginx include order dynamic-routes before static-assets" \
+    docker run --rm "$IMAGE_TAG" sh -lc \
+    'awk '\''/dynamic-routes\.conf/{d=NR}/static-assets\.conf/{s=NR}END{exit !(d&&s&&d<s)}'\'' /etc/nginx/http.d/default.conf'
+
+# 7) Runtime startup should not contain PHP-FPM parse failures.
 container_name="php-base-startup-$$"
 docker run -d --rm --name "$container_name" "$IMAGE_TAG" >/dev/null
 sleep 8
