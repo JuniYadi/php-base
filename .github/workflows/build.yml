@@ -18,29 +18,29 @@ on:
   push:
     branches: [main]
     paths-ignore:
-      - '**.md'
-      - 'docs/**'
+      - "**.md"
+      - "docs/**"
   pull_request:
     branches: [main]
   schedule:
-    - cron: '0 0 * * 0'
+    - cron: "0 0 * * 0"
   workflow_dispatch:
     inputs:
       push:
-        description: 'Push images to registry (only works on main branch)'
+        description: "Push images to registry (only works on main branch)"
         required: false
         type: boolean
         default: false
       php_version:
-        description: 'PHP version to build (leave empty for all)'
+        description: "PHP version to build (leave empty for all)"
         required: false
         type: string
-        default: ''
+        default: ""
       base_image:
-        description: 'Base image (alpine or debian)'
+        description: "Base image (alpine or debian)"
         required: false
         type: string
-        default: 'alpine'
+        default: "alpine"
 
 env:
   REGISTRY: ghcr.io
@@ -58,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        base_image: ['alpine', 'debian']
+        base_image: ["alpine", "debian"]
 
     steps:
       - name: Checkout repository
@@ -88,26 +88,27 @@ jobs:
     name: Build PHP ${{ matrix.php_version }} (${{ matrix.base_image }}-${{ matrix.arch }})
     # Use native ARM64 runner for ARM builds, standard runner for AMD64
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    needs: startup-regression
     strategy:
       fail-fast: false
       matrix:
-        php_version: ['8.2', '8.3', '8.4', '8.5']
-        base_image: ['alpine', 'debian']
-        arch: ['amd64', 'arm64']
+        php_version: ["8.2", "8.3", "8.4", "8.5"]
+        base_image: ["alpine", "debian"]
+        arch: ["amd64", "arm64"]
         exclude:
           # Only build Debian for latest versions (8.4, 8.5)
-          - php_version: '8.2'
-            base_image: 'debian'
-          - php_version: '8.3'
-            base_image: 'debian'
+          - php_version: "8.2"
+            base_image: "debian"
+          - php_version: "8.3"
+            base_image: "debian"
         include:
-          - php_version: '8.5'
-            base_image: 'alpine'
-            arch: 'amd64'
+          - php_version: "8.5"
+            base_image: "alpine"
+            arch: "amd64"
             is_latest: true
-          - php_version: '8.5'
-            base_image: 'alpine'
-            arch: 'arm64'
+          - php_version: "8.5"
+            base_image: "alpine"
+            arch: "arm64"
             is_latest: true
 
     permissions:
@@ -362,29 +363,29 @@ jobs:
       - name: Run Trivy vulnerability scanner (Alpine)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:8.5-alpine'
-          format: 'sarif'
-          output: 'trivy-alpine.sarif'
-          severity: 'CRITICAL,HIGH'
+          image-ref: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:8.5-alpine"
+          format: "sarif"
+          output: "trivy-alpine.sarif"
+          severity: "CRITICAL,HIGH"
           ignore-unfixed: true
 
       - name: Run Trivy vulnerability scanner (Debian)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:8.5-debian'
-          format: 'sarif'
-          output: 'trivy-debian.sarif'
-          severity: 'CRITICAL,HIGH'
+          image-ref: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:8.5-debian"
+          format: "sarif"
+          output: "trivy-debian.sarif"
+          severity: "CRITICAL,HIGH"
           ignore-unfixed: true
 
       - name: Upload Trivy scan results (Alpine)
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: 'trivy-alpine.sarif'
-          category: 'trivy/php-8.5-alpine'
+          sarif_file: "trivy-alpine.sarif"
+          category: "trivy/php-8.5-alpine"
 
       - name: Upload Trivy scan results (Debian)
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: 'trivy-debian.sarif'
-          category: 'trivy/php-8.5-debian'
+          sarif_file: "trivy-debian.sarif"
+          category: "trivy/php-8.5-debian"
