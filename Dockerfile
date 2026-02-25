@@ -126,6 +126,7 @@ RUN mkdir -p /usr/local/etc/php/conf.d \
 # Copy configuration templates
 COPY docker/php/php.ini.tpl /usr/local/etc/php/php.ini.tpl
 COPY docker/php/php-fpm.conf.tpl /usr/local/etc/php-fpm/php-fpm.conf.tpl
+COPY docker/php/php-fpm-www.conf.tpl /usr/local/etc/php-fpm.d/www.conf.tpl
 
 # ===============================================
 # Stage 2: Runtime Image

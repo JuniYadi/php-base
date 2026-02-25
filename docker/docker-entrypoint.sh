@@ -204,8 +204,10 @@ configure_php_fpm() {
     echo "Configuring PHP-FPM..."
 
     local fpm_conf="/usr/local/etc/php-fpm/php-fpm.conf"
+    local fpm_pool_conf="/usr/local/etc/php-fpm.d/www.conf"
+    mkdir -p /usr/local/etc/php-fpm.d
 
-    # Ensure base config exists
+    # Ensure base config exists and render runtime values.
     if [ -f "/usr/local/etc/php-fpm/php-fpm.conf.tpl" ]; then
         : "${PHP_MAX_CHILDREN:=5}"
         : "${PHP_START_SERVERS:=1}"
@@ -213,16 +215,19 @@ configure_php_fpm() {
         : "${PHP_MAX_SPARE_SERVERS:=3}"
         : "${PHP_MAX_REQUESTS:=500}"
         : "${PHP_EMERGENCY_RESTART_INTERVAL:=60s}"
-        : "${PHP_EMERGENCY_RESTART_SIG:=SIGUSR1}"
         : "${PHP_REQUEST_TERMINATE_TIMEOUT:=300s}"
 
         export PHP_MAX_CHILDREN PHP_START_SERVERS PHP_MIN_SPARE_SERVERS \
                PHP_MAX_SPARE_SERVERS PHP_MAX_REQUESTS PHP_EMERGENCY_RESTART_INTERVAL \
-               PHP_EMERGENCY_RESTART_SIG PHP_REQUEST_TERMINATE_TIMEOUT
+               PHP_REQUEST_TERMINATE_TIMEOUT
 
         if command -v envsubst >/dev/null 2>&1; then
-            envsubst '${PHP_MAX_CHILDREN} ${PHP_START_SERVERS} ${PHP_MIN_SPARE_SERVERS} ${PHP_MAX_SPARE_SERVERS} ${PHP_MAX_REQUESTS} ${PHP_EMERGENCY_RESTART_INTERVAL} ${PHP_EMERGENCY_RESTART_SIG} ${PHP_REQUEST_TERMINATE_TIMEOUT}' \
+            envsubst '${PHP_MAX_CHILDREN} ${PHP_START_SERVERS} ${PHP_MIN_SPARE_SERVERS} ${PHP_MAX_SPARE_SERVERS} ${PHP_MAX_REQUESTS} ${PHP_EMERGENCY_RESTART_INTERVAL} ${PHP_REQUEST_TERMINATE_TIMEOUT}' \
                 < /usr/local/etc/php-fpm/php-fpm.conf.tpl > "$fpm_conf"
+            if [ -f "/usr/local/etc/php-fpm.d/www.conf.tpl" ]; then
+                envsubst '${PHP_MAX_CHILDREN} ${PHP_START_SERVERS} ${PHP_MIN_SPARE_SERVERS} ${PHP_MAX_SPARE_SERVERS} ${PHP_MAX_REQUESTS} ${PHP_REQUEST_TERMINATE_TIMEOUT}' \
+                    < /usr/local/etc/php-fpm.d/www.conf.tpl > "$fpm_pool_conf"
+            fi
         else
             cp /usr/local/etc/php-fpm/php-fpm.conf.tpl "$fpm_conf"
             sed -i \
@@ -232,20 +237,43 @@ configure_php_fpm() {
                 -e "s|\${PHP_MAX_SPARE_SERVERS}|${PHP_MAX_SPARE_SERVERS}|g" \
                 -e "s|\${PHP_MAX_REQUESTS}|${PHP_MAX_REQUESTS}|g" \
                 -e "s|\${PHP_EMERGENCY_RESTART_INTERVAL}|${PHP_EMERGENCY_RESTART_INTERVAL}|g" \
-                -e "s|\${PHP_EMERGENCY_RESTART_SIG}|${PHP_EMERGENCY_RESTART_SIG}|g" \
                 -e "s|\${PHP_REQUEST_TERMINATE_TIMEOUT}|${PHP_REQUEST_TERMINATE_TIMEOUT}|g" \
                 "$fpm_conf"
+            if [ -f "/usr/local/etc/php-fpm.d/www.conf.tpl" ]; then
+                cp /usr/local/etc/php-fpm.d/www.conf.tpl "$fpm_pool_conf"
+                sed -i \
+                    -e "s|\${PHP_MAX_CHILDREN}|${PHP_MAX_CHILDREN}|g" \
+                    -e "s|\${PHP_START_SERVERS}|${PHP_START_SERVERS}|g" \
+                    -e "s|\${PHP_MIN_SPARE_SERVERS}|${PHP_MIN_SPARE_SERVERS}|g" \
+                    -e "s|\${PHP_MAX_SPARE_SERVERS}|${PHP_MAX_SPARE_SERVERS}|g" \
+                    -e "s|\${PHP_MAX_REQUESTS}|${PHP_MAX_REQUESTS}|g" \
+                    -e "s|\${PHP_REQUEST_TERMINATE_TIMEOUT}|${PHP_REQUEST_TERMINATE_TIMEOUT}|g" \
+                    "$fpm_pool_conf"
+            fi
         fi
     fi
 
-    # Fallback: create minimal config if template doesn't exist
+    # Fallback: create minimal configs if templates do not exist.
     if [ ! -f "$fpm_conf" ]; then
         cat > "$fpm_conf" << 'EOF'
 [global]
 daemonize = no
 error_log = /var/log/php-fpm/error.log
+include = /usr/local/etc/php-fpm.d/*.conf
+EOF
+    fi
 
+    if [ ! -f "$fpm_pool_conf" ]; then
+        cat > "$fpm_pool_conf" << 'EOF'
 [www]
+user = www-data
+group = www-data
+pm = dynamic
+pm.max_children = 5
+pm.start_servers = 1
+pm.min_spare_servers = 1
+pm.max_spare_servers = 3
+pm.max_requests = 500
 listen = 127.0.0.1:9000
 listen.owner = www-data
 listen.group = www-data

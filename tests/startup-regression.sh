@@ -103,4 +103,17 @@ run_expect_failure "invalid front controller newline" "ERROR: NGINX_FRONT_CONTRO
     -e "NGINX_FRONT_CONTROLLER=${bad_front}" \
     "$IMAGE_TAG" sh -lc 'echo should-not-run'
 
+# 6) Runtime startup should not contain PHP-FPM parse failures.
+container_name="php-base-startup-$$"
+docker run -d --rm --name "$container_name" "$IMAGE_TAG" >/dev/null
+sleep 8
+startup_logs="$(docker logs "$container_name" 2>&1 || true)"
+docker rm -f "$container_name" >/dev/null 2>&1 || true
+
+if printf '%s\n' "$startup_logs" | grep -Fq "unknown entry 'pm'"; then
+    printf '%s\n' "$startup_logs"
+    echo "FAILED: output unexpectedly contained: unknown entry 'pm'"
+    exit 1
+fi
+
 echo "All startup regression checks passed for ${IMAGE_TAG}"
