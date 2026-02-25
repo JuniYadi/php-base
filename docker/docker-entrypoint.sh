@@ -207,12 +207,7 @@ configure_php_fpm() {
 
     # Ensure base config exists
     if [ -f "/usr/local/etc/php-fpm/php-fpm.conf.tpl" ]; then
-        # Process template if envsubst is available
-        if command -v envsubst >/dev/null 2>&1; then
-            envsubst < /usr/local/etc/php-fpm/php-fpm.conf.tpl > "$fpm_conf"
-        else
-            cp /usr/local/etc/php-fpm/php-fpm.conf.tpl "$fpm_conf"
-        fi
+        cp /usr/local/etc/php-fpm/php-fpm.conf.tpl "$fpm_conf"
     fi
 
     # Fallback: create minimal config if template doesn't exist
@@ -258,6 +253,9 @@ EOF
     # Create PHP-FPM run directory
     mkdir -p /var/run/php-fpm
     chown www-data:www-data /var/run/php-fpm
+
+    # Fail fast if generated config is invalid.
+    php-fpm -t -y "$fpm_conf"
 
     echo "PHP-FPM configured successfully"
 }

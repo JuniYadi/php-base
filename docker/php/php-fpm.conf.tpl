@@ -4,14 +4,24 @@ daemonize = no
 error_log = /var/log/php-fpm/error.log
 log_level = notice
 
+[www]
 ; Process management
-; Dynamic process management - adjust based on container resources
 pm = dynamic
-pm.max_children = ${PHP_MAX_CHILDREN:-5}
-pm.start_servers = ${PHP_START_SERVERS:-1}
-pm.min_spare_servers = ${PHP_MIN_SPARE_SERVERS:-1}
-pm.max_spare_servers = ${PHP_MAX_SPARE_SERVERS:-3}
-pm.max_requests = ${PHP_MAX_REQUESTS:-500}
+pm.max_children = 5
+pm.start_servers = 1
+pm.min_spare_servers = 1
+pm.max_spare_servers = 3
+pm.max_requests = 500
+
+; Socket settings
+listen = 127.0.0.1:9000
+listen.owner = www-data
+listen.group = www-data
+listen.mode = 0660
+
+; Emergency restart
+emergency_restart_interval = 60s
+emergency_restart_signal = SIGUSR1
 
 ; Process security
 ; Chroot and chdir for isolation
@@ -21,16 +31,6 @@ chdir = /var/www/html
 ; User and group (set in Dockerfile for www-data)
 ; user = www-data
 ; group = www-data
-
-; Socket settings
-listen = 127.0.0.1:9000
-listen.owner = www-data
-listen.group = www-data
-listen.mode = 0660
-
-; Emergency restart
-emergency_restart_interval = ${PHP_EMERGENCY_RESTART_INTERVAL:-60s}
-emergency_restart_signal = ${PHP_EMERGENCY_RESTART_SIG:-SIGUSR1}
 
 ; Process dump
 ; process.dumpable = no
@@ -46,7 +46,7 @@ emergency_restart_signal = ${PHP_EMERGENCY_RESTART_SIG:-SIGUSR1}
 
 ; Termination timeout
 ; Terminate request after this time - 0 means no limit
-request_terminate_timeout = ${PHP_REQUEST_TERMINATE_TIMEOUT:-300s}
+request_terminate_timeout = 300s
 
 ; Clear environment
 clear_env = no
