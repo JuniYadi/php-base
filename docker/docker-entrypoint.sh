@@ -278,6 +278,7 @@ listen = 127.0.0.1:9000
 listen.owner = www-data
 listen.group = www-data
 listen.mode = 0660
+access.log = /dev/null
 EOF
     fi
 

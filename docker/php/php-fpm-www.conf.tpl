@@ -25,9 +25,8 @@ group = www-data
 ; Process dump
 ; process.dumpable = no
 
-; Access logging
-; access.log = log/$pool.access.log
-; access.format = "%R - %u %t \"%m %r\" %s"
+; Access logging disabled by default to avoid per-request noise in container logs.
+access.log = /dev/null
 
 ; Slow logging
 ; slowlog = log/$pool.log.slow
