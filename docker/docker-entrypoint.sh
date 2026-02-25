@@ -207,7 +207,35 @@ configure_php_fpm() {
 
     # Ensure base config exists
     if [ -f "/usr/local/etc/php-fpm/php-fpm.conf.tpl" ]; then
-        cp /usr/local/etc/php-fpm/php-fpm.conf.tpl "$fpm_conf"
+        : "${PHP_MAX_CHILDREN:=5}"
+        : "${PHP_START_SERVERS:=1}"
+        : "${PHP_MIN_SPARE_SERVERS:=1}"
+        : "${PHP_MAX_SPARE_SERVERS:=3}"
+        : "${PHP_MAX_REQUESTS:=500}"
+        : "${PHP_EMERGENCY_RESTART_INTERVAL:=60s}"
+        : "${PHP_EMERGENCY_RESTART_SIG:=SIGUSR1}"
+        : "${PHP_REQUEST_TERMINATE_TIMEOUT:=300s}"
+
+        export PHP_MAX_CHILDREN PHP_START_SERVERS PHP_MIN_SPARE_SERVERS \
+               PHP_MAX_SPARE_SERVERS PHP_MAX_REQUESTS PHP_EMERGENCY_RESTART_INTERVAL \
+               PHP_EMERGENCY_RESTART_SIG PHP_REQUEST_TERMINATE_TIMEOUT
+
+        if command -v envsubst >/dev/null 2>&1; then
+            envsubst '${PHP_MAX_CHILDREN} ${PHP_START_SERVERS} ${PHP_MIN_SPARE_SERVERS} ${PHP_MAX_SPARE_SERVERS} ${PHP_MAX_REQUESTS} ${PHP_EMERGENCY_RESTART_INTERVAL} ${PHP_EMERGENCY_RESTART_SIG} ${PHP_REQUEST_TERMINATE_TIMEOUT}' \
+                < /usr/local/etc/php-fpm/php-fpm.conf.tpl > "$fpm_conf"
+        else
+            cp /usr/local/etc/php-fpm/php-fpm.conf.tpl "$fpm_conf"
+            sed -i \
+                -e "s|\${PHP_MAX_CHILDREN}|${PHP_MAX_CHILDREN}|g" \
+                -e "s|\${PHP_START_SERVERS}|${PHP_START_SERVERS}|g" \
+                -e "s|\${PHP_MIN_SPARE_SERVERS}|${PHP_MIN_SPARE_SERVERS}|g" \
+                -e "s|\${PHP_MAX_SPARE_SERVERS}|${PHP_MAX_SPARE_SERVERS}|g" \
+                -e "s|\${PHP_MAX_REQUESTS}|${PHP_MAX_REQUESTS}|g" \
+                -e "s|\${PHP_EMERGENCY_RESTART_INTERVAL}|${PHP_EMERGENCY_RESTART_INTERVAL}|g" \
+                -e "s|\${PHP_EMERGENCY_RESTART_SIG}|${PHP_EMERGENCY_RESTART_SIG}|g" \
+                -e "s|\${PHP_REQUEST_TERMINATE_TIMEOUT}|${PHP_REQUEST_TERMINATE_TIMEOUT}|g" \
+                "$fpm_conf"
+        fi
     fi
 
     # Fallback: create minimal config if template doesn't exist
@@ -223,31 +251,6 @@ listen.owner = www-data
 listen.group = www-data
 listen.mode = 0660
 EOF
-    fi
-
-    # Override settings from environment
-    if [ -n "$PHP_MAX_CHILDREN" ]; then
-        sed -i "s/^pm\.max_children =.*/pm.max_children = ${PHP_MAX_CHILDREN}/" "$fpm_conf"
-    fi
-
-    if [ -n "$PHP_START_SERVERS" ]; then
-        sed -i "s/^pm\.start_servers =.*/pm.start_servers = ${PHP_START_SERVERS}/" "$fpm_conf"
-    fi
-
-    if [ -n "$PHP_MIN_SPARE_SERVERS" ]; then
-        sed -i "s/^pm\.min_spare_servers =.*/pm.min_spare_servers = ${PHP_MIN_SPARE_SERVERS}/" "$fpm_conf"
-    fi
-
-    if [ -n "$PHP_MAX_SPARE_SERVERS" ]; then
-        sed -i "s/^pm\.max_spare_servers =.*/pm.max_spare_servers = ${PHP_MAX_SPARE_SERVERS}/" "$fpm_conf"
-    fi
-
-    if [ -n "$PHP_MAX_REQUESTS" ]; then
-        sed -i "s/^pm\.max_requests =.*/pm.max_requests = ${PHP_MAX_REQUESTS}/" "$fpm_conf"
-    fi
-
-    if [ -n "$PHP_REQUEST_TERMINATE_TIMEOUT" ]; then
-        sed -i "s/^request_terminate_timeout =.*/request_terminate_timeout = ${PHP_REQUEST_TERMINATE_TIMEOUT}/" "$fpm_conf"
     fi
 
     # Create PHP-FPM run directory
