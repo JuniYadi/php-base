@@ -27,6 +27,7 @@ ENV APP_ENV=production \
 
 COPY --chown=www-data:www-data . /var/www/html
 COPY --from=vendor --chown=www-data:www-data /app /var/www/html
+COPY example/laravel/nginx/snippets/dynamic-routes.conf /etc/nginx/snippets/dynamic-routes.conf
 
 RUN su www-data -s /bin/sh -c 'composer dump-autoload --optimize' && \
     # Only set permissions on storage and bootstrap/cache for Laravel
