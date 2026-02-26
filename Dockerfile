@@ -137,11 +137,12 @@ FROM php-base AS php-runtime
 ARG BASE_IMAGE
 RUN if [ "${BASE_IMAGE}" = "debian" ]; then \
         apt-get update && apt-get install -y --no-install-recommends \
-            nginx supervisor curl ca-certificates bash && \
+            nginx supervisor curl ca-certificates bash cron && \
         rm -rf /var/lib/apt/lists/* /tmp/*; \
     else \
         apk add --no-cache \
-            nginx supervisor curl ca-certificates bash && \
+            nginx supervisor curl ca-certificates bash dcron && \
+        ln -sf /usr/sbin/crond /usr/sbin/cron && \
         rm -rf /var/cache/apk/* /tmp/*; \
     fi
 
@@ -165,6 +166,8 @@ COPY docker/nginx/snippets/ /etc/nginx/snippets/
 COPY docker/supervisor/supervisord.conf /etc/supervisor/supervisord.conf
 COPY docker/supervisor/php-fpm.conf /etc/supervisor.d/php-fpm.conf
 COPY docker/supervisor/nginx.conf /etc/supervisor.d/nginx.conf
+COPY docker/supervisor/cron.conf /etc/supervisor.d/cron.conf
+COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
 
 # Copy startup scripts
 COPY docker/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

@@ -115,7 +115,7 @@ Main app routing (`location /`) can be fully replaced by mounting:
 Extra supervised processes can be added by mounting one or more files at:
 - `/etc/supervisor.d/*.conf`
 
-Base services (`php-fpm` and `nginx`) are always run by `supervisord`.
+Base services (`cron`, `php-fpm`, and `nginx`) are always run by `supervisord`.
 Custom process definitions in `/etc/supervisor.d/*.conf` are loaded dynamically.
 
 ### Startup Contract

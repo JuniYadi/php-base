@@ -1,12 +1,13 @@
 # Runtime Supervision and Health Checks
 
-This image runs `php-fpm` and `nginx` under `supervisord`.
+This image runs `cron`, `php-fpm`, and `nginx` under `supervisord`.
 
 ## Process model
 
 - `docker-entrypoint.sh` generates runtime config from environment variables.
 - `/usr/local/bin/start.sh` starts `supervisord` in foreground mode.
 - `supervisord` manages:
+  - `cron` via `/etc/supervisor.d/cron.conf`
   - `php-fpm` via `/etc/supervisor.d/php-fpm.conf`
   - `nginx` via `/etc/supervisor.d/nginx.conf`
 - Additional framework/app processes can be added with extra files in `/etc/supervisor.d/*.conf`.
