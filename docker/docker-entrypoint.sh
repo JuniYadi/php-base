@@ -374,28 +374,6 @@ EOF
     echo "Nginx configured successfully"
 }
 
-# ===============================================
-# Ensure writable directories
-# ===============================================
-ensure_directories() {
-    echo "Ensuring writable directories..."
-
-    # Standard Laravel/Laravel-like directories
-    local dirs="/var/www/html/storage/framework/cache \
-                /var/www/html/storage/framework/sessions \
-                /var/www/html/storage/framework/views \
-                /var/www/html/storage/logs \
-                /var/www/html/bootstrap/cache"
-
-    for dir in $dirs; do
-        mkdir -p "$dir" 2>/dev/null || true
-    done
-
-    # Set permissions
-    chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache 2>/dev/null || true
-    chown -R www-data:www-data /var/www/html 2>/dev/null || true
-}
-
 run_app_bootstrap() {
     if [ -n "${APP_BOOTSTRAP_CMD:-}" ]; then
         echo "Running APP_BOOTSTRAP_CMD..."
@@ -413,7 +391,6 @@ configure_extensions
 configure_php_ini
 configure_php_fpm
 configure_nginx
-ensure_directories
 run_app_bootstrap
 
 echo "Configuration complete!"
